@@ -1,0 +1,11 @@
+{
+    "name": "Undefined.Comunitysevicesmediation.Tests",
+    "references": [
+        "Undefined.Comunitysevicesmediation"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

@@ -1,0 +1,14 @@
+{
+    "name": "Undefined.Comunitysevicesmediation.Editor.Tests",
+    "references": [
+        "Undefined.Comunitysevicesmediation.Editor",
+        "Undefined.Comunitysevicesmediation"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

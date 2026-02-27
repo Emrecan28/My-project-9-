@@ -1,0 +1,10 @@
+{
+    "name": "Undefined.Comunitysevicesmediation.Editor",
+    "references": [
+      "Undefined.Comunitysevicesmediation"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}
