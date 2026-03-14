@@ -100,10 +100,19 @@ public class MenuController : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
-        // Sonsuz Modu baslat (Level datasini sifirlar)
         if (LevelManager.Instance != null)
         {
-            LevelManager.Instance.StartEndlessMode();
+            // Kullanici en son hangi levelde kaldiysa oradan devam etsin
+            int lastPlayed = PlayerPrefs.GetInt("LastPlayedLevel", LevelManager.Instance.GetUnlockedLevel());
+            
+            if (lastPlayed == -1)
+            {
+                LevelManager.Instance.StartEndlessMode();
+            }
+            else
+            {
+                LevelManager.Instance.LoadLevel(lastPlayed);
+            }
         }
         else
         {

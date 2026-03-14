@@ -555,6 +555,15 @@ public class GridManager : MonoBehaviour
         // Oyunu durdur (Tiklamalari engelle)
         isGameActive = false;
 
+        // KAZANILAN LEVELI HEMEN KAYDET (Animasyon sirasinda cikilirsa kaybolmasin)
+        if (LevelManager.Instance != null)
+        {
+            LevelManager.Instance.UnlockNextLevel();
+        }
+        
+        // Level tamamlandi, kaydi temizle ki tekrar girerse ayni seviye eski grid ile baslamasin
+        ClearSave();
+
         // Level Complete Yazisi
         if (gameOverTextPrefab != null)
         {
@@ -587,9 +596,6 @@ public class GridManager : MonoBehaviour
     
     IEnumerator WaitAndNextLevel(GameObject textObj)
     {
-        // Level tamamlandi, kaydi temizle
-        ClearSave();
-        
         yield return new WaitForSeconds(2.0f); // 2.0 saniye "LEVEL COMPLETE!" goster (Sure uzatildi)
         
         // Simdi siradaki leveli goster "LEVEL X"
@@ -1213,7 +1219,7 @@ public class GridManager : MonoBehaviour
             {
                 if (ScoreManager.Instance.GetCurrentScore() >= LevelManager.Instance.currentLevelData.targetScore)
                 {
-                    StartCoroutine(LevelCompleteRoutine());
+                    ShowLevelComplete();
                 }
             }
         }
@@ -1431,6 +1437,10 @@ public class GridManager : MonoBehaviour
             
             // Yeni bloklar spawn edildikten sonra kontrol et (biraz bekle)
             yield return new WaitForSeconds(0.2f);
+            
+            // HER HAMLEDEN SONRA OTOMATIK KAYDET (Kullanici oyundan cikarsa kaybolmasin)
+            SaveGame();
+            
             if (CheckGameOver())
             {
                 // Elimizdeki bloklar yerlesemiyor, oyun bitti
@@ -1439,6 +1449,9 @@ public class GridManager : MonoBehaviour
         }
         else
         {
+            // HER HAMLEDEN SONRA OTOMATIK KAYDET
+            SaveGame();
+            
             // Slotlarda bloklar var; yine de mevcut durumda hareket kalmis mi kontrol et
             if (CheckGameOver())
             {
@@ -1679,33 +1692,7 @@ public class GridManager : MonoBehaviour
         return easyShapes[Random.Range(0, easyShapes.Count)];
     }
     
-    IEnumerator LevelCompleteRoutine()
-    {
-        // Oyunu durdurmak icin inputu kapatabiliriz (DraggableBlock'lar kontrol etmeli)
-        // Simdilik sadece gorsel
-        
-        yield return new WaitForSeconds(0.5f);
-        
-        // Kutlama mesaji
-        StartCoroutine(ShowFloatingText("LEVEL COMPLETE!", Color.green));
-        if (SoundManager.Instance != null) SoundManager.Instance.PlayComboExplosion(); // Kutlama sesi
-        
-        yield return new WaitForSeconds(2.0f);
-        
-        LevelManager.Instance.UnlockNextLevel();
-        
-        // Sonraki leveli yukle
-        int nextLevelNum = LevelManager.Instance.currentLevelData.levelNumber + 1;
-        if (nextLevelNum <= LevelManager.Instance.levels.Count)
-        {
-            LevelManager.Instance.LoadLevel(nextLevelNum);
-        }
-        else
-        {
-            // Oyun bitti, menuye don
-            LevelManager.Instance.LoadMenu();
-        }
-    }
+    // LevelCompleteRoutine was deleted because it's unused.
 
     public void OnRefreshButtonClicked()
     {

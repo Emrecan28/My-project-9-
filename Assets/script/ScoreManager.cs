@@ -31,14 +31,41 @@ public class ScoreManager : MonoBehaviour
         {
             isLevelMode = true;
             targetScore = LevelManager.Instance.currentLevelData.targetScore;
-            
-            // Level 1 ise target dusuk olsun test icin (Opsiyonel, zaten LevelManager ayarliyor)
         }
         else
         {
             isLevelMode = false;
         }
         
+        UpdateUI();
+    }
+    
+    // Scene basladiginda ScoreManager'in LevelManager verisini tekrar okumasini sagla
+    void OnEnable()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    void OnDisable()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {
+        // Yeni bir sahne (ozellikle GameScene) yuklendiginde LevelManager verilerini tekrar kontrol et
+        if (LevelManager.Instance != null)
+        {
+            if (LevelManager.Instance.currentLevelData != null)
+            {
+                isLevelMode = true;
+                targetScore = LevelManager.Instance.currentLevelData.targetScore;
+            }
+            else
+            {
+                isLevelMode = false;
+            }
+        }
         UpdateUI();
     }
     
@@ -108,6 +135,10 @@ public class ScoreManager : MonoBehaviour
             isLevelMode = true;
             targetScore = LevelManager.Instance.currentLevelData.targetScore;
         }
+        else
+        {
+            isLevelMode = false;
+        }
         
         UpdateUI();
     }
@@ -129,7 +160,12 @@ public class ScoreManager : MonoBehaviour
         {
             // Sonsuz Mod: Klasik gorunum
             currentScoreText.text = "Score: " + score;
-            if (highScoreText != null) highScoreText.text = "Best: " + highScore;
+            
+            // Endless modda BEST SCORE (Rekor) gosterilir
+            if (highScoreText != null) 
+            {
+                highScoreText.text = "Best: " + highScore;
+            }
         }
     }
 }

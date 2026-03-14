@@ -165,12 +165,16 @@ public class LevelManager : MonoBehaviour
     public void UnlockNextLevel()
     {
         int currentUnlocked = GetUnlockedLevel();
-        // Eger su an oynanan level, en son acik olan level ise bir sonrakini ac
-        if (currentLevelData != null && currentLevelData.levelNumber == currentUnlocked)
+        // Eger su an oynanan level, en son acik olan level'e esit veya buyukse bir sonrakini ac
+        if (currentLevelData != null && currentLevelData.levelNumber >= currentUnlocked)
         {
-            if (currentUnlocked < 99)
+            if (currentLevelData.levelNumber < 99)
             {
-                PlayerPrefs.SetInt(UNLOCKED_LEVEL_KEY, currentUnlocked + 1);
+                PlayerPrefs.SetInt(UNLOCKED_LEVEL_KEY, currentLevelData.levelNumber + 1);
+                
+                // Ana menudeki START butonunun dogrudan yeni acilan leveli yuklemesi icin LastPlayedLevel'i de guncelle
+                PlayerPrefs.SetInt("LastPlayedLevel", currentLevelData.levelNumber + 1);
+                
                 PlayerPrefs.Save();
             }
         }
@@ -183,7 +187,7 @@ public class LevelManager : MonoBehaviour
             int nextLvl = currentLevelData.levelNumber + 1;
             if (nextLvl <= 99)
             {
-                UnlockNextLevel(); // Bir sonrakini ac
+                // UnlockNextLevel artik GridManager icinde level bittigi an cagriliyor
                 LoadLevel(nextLvl);
             }
             else
@@ -199,6 +203,8 @@ public class LevelManager : MonoBehaviour
         if (levelNumber > 0 && levelNumber <= levels.Count)
         {
             currentLevelData = levels[levelNumber - 1];
+            PlayerPrefs.SetInt("LastPlayedLevel", levelNumber);
+            PlayerPrefs.Save();
             SceneManager.LoadScene("GameScene");
         }
     }
@@ -206,6 +212,8 @@ public class LevelManager : MonoBehaviour
     public void StartEndlessMode()
     {
         currentLevelData = null;
+        PlayerPrefs.SetInt("LastPlayedLevel", -1); // -1 sonsuz modu temsil etsin
+        PlayerPrefs.Save();
         SceneManager.LoadScene("GameScene");
     }
     
