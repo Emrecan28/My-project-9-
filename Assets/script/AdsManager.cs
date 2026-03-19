@@ -272,8 +272,13 @@ public class AdsManager : MonoBehaviour
     void OnInterstitialLoadFailed(LevelPlayAdError error)
     {
         Debug.LogError("AdsManager: Interstitial yüklenemedi: " + error);
-        interstitialCallback?.Invoke(false);
-        interstitialCallback = null;
+        
+        if (interstitialCallback != null)
+        {
+            var callback = interstitialCallback;
+            interstitialCallback = null;
+            MainThreadDispatcher.Enqueue(() => { callback(false); });
+        }
         
         // Yeniden yüklemeyi dene
         CancelInvoke(nameof(LoadInterstitialAd));
@@ -298,8 +303,13 @@ public class AdsManager : MonoBehaviour
     {
         Debug.LogError("AdsManager: Interstitial gösterim hatası: " + error);
         interstitialAd.LoadAd();
-        interstitialCallback?.Invoke(false);
-        interstitialCallback = null;
+        
+        if (interstitialCallback != null)
+        {
+            var callback = interstitialCallback;
+            interstitialCallback = null;
+            MainThreadDispatcher.Enqueue(() => { callback(false); });
+        }
     }
 
     void OnInterstitialClosed(LevelPlayAdInfo adInfo)
@@ -311,7 +321,7 @@ public class AdsManager : MonoBehaviour
         {
             var callback = interstitialCallback;
             interstitialCallback = null;
-            callback(true);
+            MainThreadDispatcher.Enqueue(() => { callback(true); });
         }
     }
 
@@ -323,8 +333,13 @@ public class AdsManager : MonoBehaviour
     void OnRewardedLoadFailed(LevelPlayAdError error)
     {
         Debug.LogError("AdsManager: Rewarded yüklenemedi: " + error);
-        rewardedCallback?.Invoke(false);
-        rewardedCallback = null;
+        
+        if (rewardedCallback != null)
+        {
+            var callback = rewardedCallback;
+            rewardedCallback = null;
+            MainThreadDispatcher.Enqueue(() => { callback(false); });
+        }
         
         // Yeniden yüklemeyi dene
         CancelInvoke(nameof(LoadRewardedAd));
@@ -349,8 +364,14 @@ public class AdsManager : MonoBehaviour
     {
         Debug.LogError("AdsManager: Rewarded gösterim hatası: " + error);
         rewardedAd.LoadAd();
-        rewardedCallback?.Invoke(false);
-        rewardedCallback = null;
+        
+        if (rewardedCallback != null)
+        {
+            var callback = rewardedCallback;
+            rewardedCallback = null;
+            MainThreadDispatcher.Enqueue(() => { callback(false); });
+        }
+        
         rewardedEarned = false;
     }
 
@@ -371,7 +392,7 @@ public class AdsManager : MonoBehaviour
             rewardedCallback = null;
             bool earned = rewardedEarned;
             rewardedEarned = false;
-            callback(earned);
+            MainThreadDispatcher.Enqueue(() => { callback(earned); });
         }
     }
 }

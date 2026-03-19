@@ -1707,10 +1707,24 @@ public class GridManager : MonoBehaviour
         {
             if (AdsManager.Instance != null)
             {
+                // UI tiklamalarini engelle ki reklam yuklenirken baska seye basilmasin
+                isGameActive = false;
+                
                 AdsManager.Instance.ShowExtraLifeRewarded(success =>
                 {
-                    GrantRefreshFromAd();
-                    OnRefreshButtonClicked();
+                    // MainThreadDispatcher kullanildigi icin isGameActive'i burada guvenle true yapabiliriz
+                    isGameActive = true;
+                    
+                    if (success)
+                    {
+                        GrantRefreshFromAd();
+                        OnRefreshButtonClicked();
+                    }
+                    else
+                    {
+                        // Eger reklam gosterilemezse (internet yok vb.) kullaniciya kucuk bir bildirim yapilabilir
+                        StartCoroutine(ShowFloatingText("AD NOT READY", Color.red));
+                    }
                 });
             }
         }
