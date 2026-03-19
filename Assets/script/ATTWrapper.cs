@@ -15,19 +15,21 @@ public class ATTWrapper
     [MonoPInvokeCallback(typeof(ATTCallback))]
     private static void OnRequestTrackingAuthorization(int status)
     {
+        // iOS tarafindan gelen callback arka plan thread'inde (background thread) calisabilir.
+        // Unity API'leri ana thread disinda cagrilirsa Crash'e (Cokmeye) neden olur.
+        // Bu yuzden bu fonksiyonu MainThread'de calistirmaliyiz.
+        // Unity 2021 ve sonrasinda SynchronizationContext veya Dispatcher kullanilabilir
+        // ancak en basit ve guvenli yol bir action kuyruguna atmaktir.
+        
         if (callbackAction != null)
         {
-            // Unity main thread check might be needed if callback updates UI, but usually safe for simple logic
-            // However, callbacks from iOS are on background thread often.
-            // Dispatch to main thread if needed.
-            // For now, let's assume AdsManager handles it or Unity marshals it.
-            // Actually, usually we need MainThreadDispatcher. 
-            // But let's keep it simple. If it crashes, we'll fix.
-            
-            // To be safe, we can use a Unity object or Loom pattern, but static is tricky.
-            // Let's just invoke.
-            callbackAction(status);
+            var actionToRun = callbackAction;
             callbackAction = null;
+            
+            // Ana thread'de calismasini sagla
+            MainThreadDispatcher.Enqueue(() => {
+                actionToRun(status);
+            });
         }
     }
 
