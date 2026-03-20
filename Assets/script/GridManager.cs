@@ -733,15 +733,38 @@ public class GridManager : MonoBehaviour
             int attempts = 0;
             int maxAttempts = 50; // Iyi bir sekil bulmak icin kac kere denesin?
             
+            // --- LEVEL ZORLUK AYARI ---
+            int currentLevelNum = 0;
+            if (LevelManager.Instance != null && LevelManager.Instance.currentLevelData != null)
+            {
+                currentLevelNum = LevelManager.Instance.currentLevelData.levelNumber;
+            }
+            
             while (attempts < maxAttempts)
             {
-                // Sans dagilimi: %25 Kolay, %45 Orta, %30 Zor (Buyuk bloklar icin sansi artirdik)
                 float chance = Random.value;
                 List<Vector2Int[]> targetList;
                 
-                if (chance < 0.25f) targetList = easyShapes;
-                else if (chance < 0.70f) targetList = mediumShapes;
-                else targetList = hardShapes;
+                if (currentLevelNum > 0 && currentLevelNum <= 10)
+                {
+                    // ILK 10 LEVEL: %80 Kolay, %20 Orta (Asla zor gelmez)
+                    if (chance < 0.80f) targetList = easyShapes;
+                    else targetList = mediumShapes;
+                }
+                else if (currentLevelNum > 10 && currentLevelNum <= 20)
+                {
+                    // 11-20 LEVELLER: %60 Kolay, %30 Orta, %10 Zor
+                    if (chance < 0.60f) targetList = easyShapes;
+                    else if (chance < 0.90f) targetList = mediumShapes;
+                    else targetList = hardShapes;
+                }
+                else
+                {
+                    // SONSUZ MOD VEYA 20+ LEVELLER: Orijinal zorluk (%25 Kolay, %45 Orta, %30 Zor)
+                    if (chance < 0.25f) targetList = easyShapes;
+                    else if (chance < 0.70f) targetList = mediumShapes;
+                    else targetList = hardShapes;
+                }
                 
                 Vector2Int[] candidate = targetList[Random.Range(0, targetList.Count)];
                 

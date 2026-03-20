@@ -102,17 +102,13 @@ public class MenuController : MonoBehaviour
     {
         if (LevelManager.Instance != null)
         {
-            // Kullanici en son hangi levelde kaldiysa oradan devam etsin
-            int lastPlayed = PlayerPrefs.GetInt("LastPlayedLevel", LevelManager.Instance.GetUnlockedLevel());
+            // Eger oyuncu daha once bir levelden ciktiysa, o levelin kaydini sil ki
+            // sonsuz moda (klasik moda) girince levelin eski gridleri gelmesin.
+            PlayerPrefs.SetInt("LastPlayedLevel", -1);
+            PlayerPrefs.Save();
             
-            if (lastPlayed == -1)
-            {
-                LevelManager.Instance.StartEndlessMode();
-            }
-            else
-            {
-                LevelManager.Instance.LoadLevel(lastPlayed);
-            }
+            // START butonu HER ZAMAN sonsuz modu (klasik modu) baslatmali
+            LevelManager.Instance.StartEndlessMode();
         }
         else
         {
