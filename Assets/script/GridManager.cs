@@ -64,6 +64,7 @@ public class GridManager : MonoBehaviour
     public UnityEngine.UI.Button refreshButton;
     public UnityEngine.UI.Image refreshButtonBackground;
     public int remainingRefreshes = 1;
+    public int maxRefreshes = 1; // Başlangıçtaki hak sayısı
     public TMPro.TextMeshProUGUI refreshCountText;
     private Vector3 refreshButtonOriginalScale = Vector3.one;
     private Coroutine refreshButtonPulseCoroutine;
