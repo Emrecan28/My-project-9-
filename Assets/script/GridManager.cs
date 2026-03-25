@@ -217,6 +217,37 @@ public class GridManager : MonoBehaviour
         {
             SpawnNewBlocks();
         }
+        
+        // --- KAMERA ORTALAMA VE SIGDIRMA ISLEMI ---
+        AdjustCameraToFitGrid();
+    }
+    
+    // Kamerayi Grid'e ve Slotlara gore otomatik ayarlar
+    void AdjustCameraToFitGrid()
+    {
+        if (Camera.main == null) return;
+
+        // 1. Grid'in toplam genisligini hesapla (Sagdan ve soldan biraz bosluk payi (padding) birakarak)
+        float totalGridWidth = (rows * cellSize) + ((rows - 1) * spacing);
+        
+        // Ekranda gridin yanlarinda kalmasini istedigimiz bosluk (margin) - ornegin 1 birim
+        float margin = 1.0f; 
+        float targetWidth = totalGridWidth + margin;
+
+        // 2. Ekranin en-boy oranini (aspect ratio) bul
+        float screenAspect = (float)Screen.width / (float)Screen.height;
+
+        // 3. Kameranin orthographic size'ini (dikey gorus alani) hesapla
+        // OrthographicSize = (Ekran Genisligi / 2) / AspectRatio
+        float targetOrthographicSize = (targetWidth / 2f) / screenAspect;
+
+        // 4. Eger hesaplanan size mevcut size'dan buyukse (yani ekran dar ise) kamerayi geriye cek (size'i buyut)
+        // Kucukse (tablet gibi genis ekran) mevcut size'da kalabilir veya orantisal kuculebilir.
+        // Genelde minimum bir deger (ornegin 5) tutmak iyidir.
+        if (targetOrthographicSize > Camera.main.orthographicSize)
+        {
+            Camera.main.orthographicSize = targetOrthographicSize;
+        }
     }
     
     // --- OYUN KAYIT SISTEMI (SAVE SYSTEM) ---
@@ -2146,6 +2177,10 @@ public class GridManager : MonoBehaviour
                 Destroy(slotTransforms[i].GetChild(j).gameObject);
             }
         }
+        
+        // Yenileme hakkini sifirla (Oyuncu tekrar 1 hakka sahip olsun)
+        remainingRefreshes = maxRefreshes;
+        UpdateRefreshButtonState();
         
         // Level'i yeniden olustur ve hemen kaydet
         GenerateLevel();
