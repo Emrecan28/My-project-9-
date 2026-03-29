@@ -258,8 +258,16 @@ public class DraggableBlock : MonoBehaviour
 
     void OnMouseDrag()
     {
+        // Oyun aktif degilse hicbir sey yapma
+        if (gridManager != null && !gridManager.isGameActive) return;
+
         if (!isDragging) return;
-        transform.position = GetMouseWorldPos() + offset;
+        
+        // Parmağın altında kalmaması için bloğu parmağın "üstüne" taşıyoruz.
+        // Y eksenine eklenecek değer (Offset). Ne kadar büyük olursa o kadar yukarıda durur.
+        Vector3 touchOffset = new Vector3(0, 2.5f, 0); 
+        
+        transform.position = GetMouseWorldPos() + offset + touchOffset;
         
         // Preview (Onizleme)
         if (gridManager != null)

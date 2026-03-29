@@ -140,11 +140,11 @@ public class AdsManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentInterstitialId))
         {
-            Debug.LogWarning("AdsManager: Interstitial Ad Unit Id boş, interstitial oluşturulmadı.");
-            return;
+            Debug.LogWarning("AdsManager: Interstitial Ad Unit Id boş, default olarak yüklenmeye çalışılacak.");
         }
 
-        interstitialAd = new LevelPlayInterstitialAd(currentInterstitialId);
+        // Eğer ID boşsa LevelPlay kendi varsayılan ID'siyle dener. Bu da "AD NOT READY" hatasını engellemeye yardımcı olabilir.
+        interstitialAd = string.IsNullOrEmpty(currentInterstitialId) ? new LevelPlayInterstitialAd("") : new LevelPlayInterstitialAd(currentInterstitialId);
         interstitialAd.OnAdLoaded += OnInterstitialLoaded;
         interstitialAd.OnAdLoadFailed += OnInterstitialLoadFailed;
         interstitialAd.OnAdDisplayed += OnInterstitialDisplayed;
@@ -158,11 +158,10 @@ public class AdsManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentRewardedId))
         {
-            Debug.LogWarning("AdsManager: Rewarded Ad Unit Id boş, rewarded oluşturulmadı.");
-            return;
+            Debug.LogWarning("AdsManager: Rewarded Ad Unit Id boş, default olarak yüklenmeye çalışılacak.");
         }
 
-        rewardedAd = new LevelPlayRewardedAd(currentRewardedId);
+        rewardedAd = string.IsNullOrEmpty(currentRewardedId) ? new LevelPlayRewardedAd("") : new LevelPlayRewardedAd(currentRewardedId);
         rewardedAd.OnAdLoaded += OnRewardedLoaded;
         rewardedAd.OnAdLoadFailed += OnRewardedLoadFailed;
         rewardedAd.OnAdDisplayed += OnRewardedDisplayed;

@@ -718,7 +718,11 @@ public class GridManager : MonoBehaviour
             GameObject slot = Instantiate(spawnSlotPrefab, transform);
             slot.name = $"Slot_{i}";
             slot.transform.localPosition = slotPos;
-            slot.transform.localScale = Vector3.one * slotScale;
+            
+            // Kullanicinin geri bildirimi: "Slot kutulari cok buyuk, yanlara tasiyor"
+            // Orjinal boyut: Vector3.one * slotScale. Simdi bunu biraz kucultuyoruz.
+            slot.transform.localScale = Vector3.one * (slotScale * 0.85f); // %15 kucultuldu
+            
             slotTransforms[i] = slot.transform;
 
             SetVisuals(slot, slotNormalColor, 1);
@@ -1793,25 +1797,37 @@ public class GridManager : MonoBehaviour
 
             if (refreshButtonBackground != null)
             {
-                refreshButtonBackground.color = (remainingRefreshes > 0)
-                    ? Color.white
-                    : new Color(0.35f, 0.35f, 0.35f, 1f);
+                // Rengini hep ayni (aktif) birak. Sonucta artik 0 da olsa basilip reklam izlenecek.
+                refreshButtonBackground.color = Color.white;
             }
 
-            // Text varsa guncelle
+            // Text varsa guncelle (Eger 0 olursa "AD" veya reklam ikonu konulabilir ama simdilik sayi)
             if (refreshCountText != null)
             {
-                refreshCountText.text = remainingRefreshes.ToString();
+                if (remainingRefreshes > 0)
+                {
+                    refreshCountText.text = remainingRefreshes.ToString();
+                }
+                else
+                {
+                    refreshCountText.text = "+"; // veya "AD", "Oynat"
+                }
             }
             else
             {
                 // TextMeshProUGUI degilse cocuklarda ara
                 var textComp = refreshButton.GetComponentInChildren<TMPro.TextMeshProUGUI>();
-                if (textComp != null) textComp.text = remainingRefreshes.ToString();
+                if (textComp != null) 
+                {
+                    textComp.text = remainingRefreshes > 0 ? remainingRefreshes.ToString() : "+";
+                }
                 else
                 {
                     var textLegacy = refreshButton.GetComponentInChildren<UnityEngine.UI.Text>();
-                    if (textLegacy != null) textLegacy.text = remainingRefreshes.ToString();
+                    if (textLegacy != null) 
+                    {
+                        textLegacy.text = remainingRefreshes > 0 ? remainingRefreshes.ToString() : "+";
+                    }
                 }
             }
 
