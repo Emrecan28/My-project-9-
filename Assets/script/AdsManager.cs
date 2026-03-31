@@ -22,6 +22,7 @@ public class AdsManager : MonoBehaviour
     [Header("General Settings")]
     [SerializeField] string gameOverPlacement;
     [SerializeField] string extraLifePlacement;
+    [SerializeField] string undoPlacement;
 
     // Runtime IDs
     string currentAppKey;
@@ -36,6 +37,7 @@ public class AdsManager : MonoBehaviour
     Action<bool> interstitialCallback;
     Action<bool> rewardedCallback;
     bool rewardedEarned;
+    bool rewardedWasDisplayed;
 
     void Awake()
     {
@@ -182,6 +184,11 @@ public class AdsManager : MonoBehaviour
         ShowRewarded(extraLifePlacement, onCompleted);
     }
 
+    public void ShowUndoRewarded(Action<bool> onCompleted)
+    {
+        ShowRewarded(undoPlacement, onCompleted);
+    }
+
     void ShowInterstitial(string placement, Action<bool> onCompleted)
     {
         if (interstitialAd == null)
@@ -250,6 +257,7 @@ public class AdsManager : MonoBehaviour
 
         rewardedCallback = onCompleted;
         rewardedEarned = false;
+        rewardedWasDisplayed = false;
 
         if (string.IsNullOrEmpty(placement))
         {
@@ -357,6 +365,7 @@ public class AdsManager : MonoBehaviour
     void OnRewardedDisplayed(LevelPlayAdInfo adInfo)
     {
         Debug.Log("AdsManager: Rewarded görüntüleniyor.");
+        rewardedWasDisplayed = true;
     }
 
     void OnRewardedDisplayFailed(LevelPlayAdInfo adInfo, LevelPlayAdError error)
@@ -372,6 +381,7 @@ public class AdsManager : MonoBehaviour
         }
         
         rewardedEarned = false;
+        rewardedWasDisplayed = false;
     }
 
     void OnRewardedRewarded(LevelPlayAdInfo adInfo, LevelPlayReward reward)
@@ -389,8 +399,9 @@ public class AdsManager : MonoBehaviour
         {
             var callback = rewardedCallback;
             rewardedCallback = null;
-            bool earned = rewardedEarned;
+            bool earned = rewardedEarned || rewardedWasDisplayed;
             rewardedEarned = false;
+            rewardedWasDisplayed = false;
             MainThreadDispatcher.Enqueue(() => { callback(earned); });
         }
     }

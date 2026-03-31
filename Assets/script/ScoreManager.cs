@@ -15,6 +15,7 @@ public class ScoreManager : MonoBehaviour
     private int targetScore = 0;
     private bool isLevelMode = false;
     private bool isLevelCompleted = false; // Level tamamlandi mi kontrolu
+    private Coroutine scorePulseCoroutine;
 
     void Awake()
     {
@@ -167,5 +168,68 @@ public class ScoreManager : MonoBehaviour
                 highScoreText.text = "Best: " + highScore;
             }
         }
+    }
+
+    public void PlayComboScorePulse(bool bigCombo)
+    {
+        if (currentScoreText == null) return;
+
+        if (scorePulseCoroutine != null)
+        {
+            StopCoroutine(scorePulseCoroutine);
+        }
+
+        scorePulseCoroutine = StartCoroutine(ScorePulseRoutine(bigCombo));
+    }
+
+    System.Collections.IEnumerator ScorePulseRoutine(bool bigCombo)
+    {
+        float duration = bigCombo ? 0.38f : 0.24f;
+        float scaleBoost = bigCombo ? 1.25f : 1.12f;
+        Color pulseColor = bigCombo ? new Color(1f, 0.92f, 0.35f, 1f) : Color.white;
+
+        Vector3 scoreStartScale = currentScoreText.transform.localScale;
+        Color scoreStartColor = currentScoreText.color;
+
+        Vector3 highStartScale = Vector3.one;
+        Color highStartColor = Color.white;
+        bool hasHigh = highScoreText != null;
+
+        if (hasHigh)
+        {
+            highStartScale = highScoreText.transform.localScale;
+            highStartColor = highScoreText.color;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float wave = Mathf.Sin(t * Mathf.PI);
+            float scale = Mathf.Lerp(1f, scaleBoost, wave);
+
+            currentScoreText.transform.localScale = scoreStartScale * scale;
+            currentScoreText.color = Color.Lerp(scoreStartColor, pulseColor, wave);
+
+            if (hasHigh)
+            {
+                highScoreText.transform.localScale = highStartScale * Mathf.Lerp(1f, bigCombo ? 1.12f : 1.06f, wave);
+                highScoreText.color = Color.Lerp(highStartColor, pulseColor, wave * 0.6f);
+            }
+
+            yield return null;
+        }
+
+        currentScoreText.transform.localScale = scoreStartScale;
+        currentScoreText.color = scoreStartColor;
+
+        if (hasHigh)
+        {
+            highScoreText.transform.localScale = highStartScale;
+            highScoreText.color = highStartColor;
+        }
+
+        scorePulseCoroutine = null;
     }
 }

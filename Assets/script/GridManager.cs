@@ -59,6 +59,21 @@ public class GridManager : MonoBehaviour
     
     [Header("--- 8. Görsel Geri Bildirim ---")]
     public Font feedbackFont; // Perfect/Nice yazilari icin font (MUTLAKA ATAYIN)
+    public Color perfectNeonColorA = new Color(0.2f, 1f, 0.95f, 1f);
+    public Color perfectNeonColorB = new Color(1f, 0.25f, 0.95f, 1f);
+    public float perfectNeonDuration = 0.65f;
+    [Range(0f, 1f)] public float perfectNeonIntensity = 0.85f;
+    public Color niceNeonColorA = new Color(0.35f, 0.8f, 1f, 1f);
+    public Color niceNeonColorB = new Color(0.75f, 0.45f, 1f, 1f);
+    public float niceNeonDuration = 0.46f;
+    [Range(0f, 1f)] public float niceNeonIntensity = 0.58f;
+    public Color perfectEdgeFlashColor = new Color(0.1f, 1f, 0.95f, 1f);
+    public float perfectEdgeFlashDuration = 0.35f;
+    public Color perfectBorderPulseColor = new Color(1f, 0.35f, 0.95f, 1f);
+    public float perfectBorderPulseDuration = 0.45f;
+    public Color perfectBurstColorA = new Color(1f, 0.9f, 0.25f, 1f);
+    public Color perfectBurstColorB = new Color(1f, 0.35f, 0.9f, 1f);
+    public float perfectBurstDuration = 0.7f;
     
     [Header("--- Yan Hak UI ---")]
     public UnityEngine.UI.Button refreshButton;
@@ -66,8 +81,17 @@ public class GridManager : MonoBehaviour
     public int remainingRefreshes = 1;
     public int maxRefreshes = 1; // Başlangıçtaki hak sayısı
     public TMPro.TextMeshProUGUI refreshCountText;
+    public UnityEngine.UI.Button undoButton;
+    public UnityEngine.UI.Image undoButtonBackground;
+    public int remainingUndos = 1;
+    public int maxUndos = 1;
+    public TMPro.TextMeshProUGUI undoCountText;
     private Vector3 refreshButtonOriginalScale = Vector3.one;
     private Coroutine refreshButtonPulseCoroutine;
+    private string undoGridData = "";
+    private string[] undoSlotData = new string[3];
+    private int undoScore;
+    private bool hasUndoSnapshot;
     
     private Transform[] slotTransforms = new Transform[3];
     private GameObject[,] gridStatus;
@@ -76,6 +100,11 @@ public class GridManager : MonoBehaviour
     public Color highlightColor = new Color(0.8f, 0.8f, 0.8f, 1f);
     public Color invalidHighlightColor = new Color(1f, 0.3f, 0.3f, 0.5f); // Kirmizi vurgu rengi (Gecersiz yerlesim)
     private Dictionary<string, Vector2Int> cellNameToGridPos = new Dictionary<string, Vector2Int>();
+    private Coroutine perfectNeonCoroutine;
+    private Coroutine borderPulseCoroutine;
+    private Coroutine edgeFlashCoroutine;
+    private Coroutine perfectBurstCoroutine;
+    private Coroutine perfectTitleCoroutine;
     
     // Oyun Durumu
     public bool isGameActive = true;
@@ -174,6 +203,12 @@ public class GridManager : MonoBehaviour
             refreshButtonOriginalScale = refreshButton.transform.localScale;
             refreshButton.onClick.AddListener(OnRefreshButtonClicked);
             UpdateRefreshButtonState();
+        }
+
+        if (undoButton != null)
+        {
+            undoButton.onClick.AddListener(OnUndoButtonClicked);
+            UpdateUndoButtonState();
         }
     }
 
@@ -324,6 +359,60 @@ public class GridManager : MonoBehaviour
             Debug.LogError("SaveGame Hatasi: " + e.Message);
         }
     }
+
+    string SerializeGridData()
+    {
+        SyncGridStatus();
+        string gridData = "";
+        for (int x = 0; x < rows; x++)
+        {
+            for (int y = 0; y < columns; y++)
+            {
+                if (gridStatus[x, y] != null)
+                {
+                    Color c = Color.white;
+                    SpriteRenderer sr = gridStatus[x, y].GetComponent<SpriteRenderer>();
+                    if (sr != null) c = sr.color;
+                    gridData += $"{x},{y},{ColorUtility.ToHtmlStringRGBA(c)}|";
+                }
+            }
+        }
+        return gridData;
+    }
+
+    string SerializeSlotData(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= 3) return "";
+        Transform slot = slotTransforms[slotIndex];
+        if (slot == null || slot.childCount == 0) return "";
+
+        DraggableBlock db = slot.GetComponentInChildren<DraggableBlock>();
+        if (db == null || db.originalShape == null) return "";
+
+        string shapeStr = "";
+        foreach (var vec in db.originalShape)
+        {
+            shapeStr += $"{vec.x},{vec.y};";
+        }
+
+        Color c = Color.white;
+        SpriteRenderer sr = db.GetComponentInChildren<SpriteRenderer>();
+        if (sr != null) c = sr.color;
+
+        return $"{shapeStr}#{ColorUtility.ToHtmlStringRGBA(c)}";
+    }
+
+    public void CaptureUndoSnapshot()
+    {
+        undoGridData = SerializeGridData();
+        for (int i = 0; i < 3; i++)
+        {
+            undoSlotData[i] = SerializeSlotData(i);
+        }
+        undoScore = ScoreManager.Instance != null ? ScoreManager.Instance.GetCurrentScore() : 0;
+        hasUndoSnapshot = true;
+        UpdateUndoButtonState();
+    }
     
     void SaveSlots()
     {
@@ -450,6 +539,98 @@ public class GridManager : MonoBehaviour
         // bu.gridLayer = LayerMask.GetMask("Grid"); // KALDIRILDI
         
         gridStatus[x, y] = cellBlock;
+    }
+
+    void RestoreGridFromData(string gridData)
+    {
+        if (string.IsNullOrEmpty(gridData)) return;
+
+        string[] cells = gridData.Split('|');
+        foreach (var cellData in cells)
+        {
+            if (string.IsNullOrEmpty(cellData)) continue;
+
+            string[] parts = cellData.Split(',');
+            if (parts.Length < 3) continue;
+
+            int x = int.Parse(parts[0]);
+            int y = int.Parse(parts[1]);
+            Color color;
+            if (ColorUtility.TryParseHtmlString("#" + parts[2], out color))
+            {
+                PlaceBlockAt(x, y, color);
+            }
+        }
+    }
+
+    void RestoreSlotFromData(int slotIndex, string data)
+    {
+        if (string.IsNullOrEmpty(data)) return;
+
+        string[] mainParts = data.Split('#');
+        string shapeData = mainParts[0];
+        string colorHex = mainParts.Length > 1 ? mainParts[1] : "FFFFFF";
+
+        Color color;
+        ColorUtility.TryParseHtmlString("#" + colorHex, out color);
+
+        List<Vector2Int> shape = new List<Vector2Int>();
+        string[] vecs = shapeData.Split(';');
+        foreach (var v in vecs)
+        {
+            if (string.IsNullOrEmpty(v)) continue;
+            string[] xy = v.Split(',');
+            if (xy.Length == 2)
+            {
+                shape.Add(new Vector2Int(int.Parse(xy[0]), int.Parse(xy[1])));
+            }
+        }
+
+        CreateBlockInSlot(slotIndex, shape, color);
+    }
+
+    void RestoreUndoSnapshot()
+    {
+        if (!hasUndoSnapshot) return;
+
+        ClearHighlight();
+
+        for (int x = 0; x < rows; x++)
+        {
+            for (int y = 0; y < columns; y++)
+            {
+                if (gridStatus[x, y] != null)
+                {
+                    SafeDestroy(gridStatus[x, y]);
+                    gridStatus[x, y] = null;
+                }
+            }
+        }
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (slotTransforms[i] == null) continue;
+            for (int j = slotTransforms[i].childCount - 1; j >= 0; j--)
+            {
+                Destroy(slotTransforms[i].GetChild(j).gameObject);
+            }
+        }
+
+        RestoreGridFromData(undoGridData);
+
+        for (int i = 0; i < 3; i++)
+        {
+            RestoreSlotFromData(i, undoSlotData[i]);
+        }
+
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.SetScore(undoScore);
+        }
+
+        hasUndoSnapshot = false;
+        SaveGame();
+        UpdateUndoButtonState();
     }
     
     void CreateBlockInSlot(int slotIndex, List<Vector2Int> shape, Color color)
@@ -1304,10 +1485,17 @@ public class GridManager : MonoBehaviour
         if (isBigExplosion)
         {
             StartCoroutine(ShowFloatingText("PERFECT!", new Color(1f, 0.9f, 0.2f, 1f)));
+            TriggerPerfectComboVfx();
         }
         else
         {
             StartCoroutine(ShowFloatingText("NICE", Color.white));
+            TriggerNiceComboVfx();
+        }
+
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.PlayComboScorePulse(isBigExplosion);
         }
 
         // Patlama animasyonu icin bloklari topla
@@ -1458,6 +1646,388 @@ public class GridManager : MonoBehaviour
             yield return null;
         }
         Destroy(canvasObj);
+    }
+
+    void TriggerPerfectComboVfx()
+    {
+        if (perfectNeonCoroutine != null)
+        {
+            StopCoroutine(perfectNeonCoroutine);
+        }
+        perfectNeonCoroutine = StartCoroutine(PlayGridSweep(perfectNeonColorA, perfectNeonColorB, perfectNeonDuration, perfectNeonIntensity));
+
+        if (borderPulseCoroutine != null)
+        {
+            StopCoroutine(borderPulseCoroutine);
+        }
+        borderPulseCoroutine = StartCoroutine(PlayBorderPulse(perfectBorderPulseColor, perfectBorderPulseDuration));
+
+        if (edgeFlashCoroutine != null)
+        {
+            StopCoroutine(edgeFlashCoroutine);
+        }
+        edgeFlashCoroutine = StartCoroutine(PlayEdgeFlash(perfectEdgeFlashColor, perfectEdgeFlashDuration));
+
+    }
+
+    void TriggerNiceComboVfx()
+    {
+        if (perfectNeonCoroutine != null)
+        {
+            StopCoroutine(perfectNeonCoroutine);
+        }
+        perfectNeonCoroutine = StartCoroutine(PlayGridSweep(niceNeonColorA, niceNeonColorB, niceNeonDuration, niceNeonIntensity));
+    }
+
+    IEnumerator PlayGridSweep(Color colorA, Color colorB, float duration, float intensity)
+    {
+        if (gridCells == null) yield break;
+
+        SpriteRenderer[,] renderers = new SpriteRenderer[rows, columns];
+        Color[,] originalColors = new Color[rows, columns];
+
+        for (int x = 0; x < rows; x++)
+        {
+            for (int y = 0; y < columns; y++)
+            {
+                if (gridCells[x, y] == null) continue;
+                SpriteRenderer sr = gridCells[x, y].GetComponent<SpriteRenderer>();
+                if (sr == null) continue;
+                renderers[x, y] = sr;
+                originalColors[x, y] = sr.color;
+            }
+        }
+
+        float elapsed = 0f;
+        float bandWidth = 0.24f;
+        float widthDivisor = Mathf.Max(1f, rows - 1f);
+        float heightDivisor = Mathf.Max(1f, columns - 1f);
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float progress = Mathf.Clamp01(elapsed / duration);
+            float sweep = Mathf.Lerp(-0.25f, 1.25f, progress);
+
+            for (int x = 0; x < rows; x++)
+            {
+                for (int y = 0; y < columns; y++)
+                {
+                    SpriteRenderer sr = renderers[x, y];
+                    if (sr == null) continue;
+
+                    float normalizedX = x / widthDivisor;
+                    float normalizedY = y / heightDivisor;
+                    float diagonal = (normalizedX + normalizedY) * 0.5f;
+                    float band = Mathf.Clamp01(1f - Mathf.Abs(diagonal - sweep) / bandWidth);
+                    float strength = band * band * intensity;
+                    Color neon = Color.Lerp(colorA, colorB, Mathf.PingPong(progress * 2.4f + diagonal * 1.5f, 1f));
+                    Color target = Color.Lerp(originalColors[x, y], neon, strength);
+                    target.a = originalColors[x, y].a;
+                    sr.color = target;
+                }
+            }
+
+            yield return null;
+        }
+
+        for (int x = 0; x < rows; x++)
+        {
+            for (int y = 0; y < columns; y++)
+            {
+                SpriteRenderer sr = renderers[x, y];
+                if (sr == null) continue;
+                sr.color = originalColors[x, y];
+            }
+        }
+
+        perfectNeonCoroutine = null;
+    }
+
+    IEnumerator PlayBorderPulse(Color pulseColor, float duration)
+    {
+        if (gridCells == null) yield break;
+
+        List<SpriteRenderer> borderRenderers = new List<SpriteRenderer>();
+        List<Color> baseColors = new List<Color>();
+
+        for (int x = 0; x < rows; x++)
+        {
+            for (int y = 0; y < columns; y++)
+            {
+                bool isBorder = x == 0 || x == rows - 1 || y == 0 || y == columns - 1;
+                if (!isBorder || gridCells[x, y] == null) continue;
+
+                SpriteRenderer sr = gridCells[x, y].GetComponent<SpriteRenderer>();
+                if (sr == null) continue;
+
+                borderRenderers.Add(sr);
+                baseColors.Add(sr.color);
+            }
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float wave = Mathf.Sin(t * Mathf.PI);
+
+            for (int i = 0; i < borderRenderers.Count; i++)
+            {
+                if (borderRenderers[i] == null) continue;
+                Color c = Color.Lerp(baseColors[i], pulseColor, wave * 0.9f);
+                c.a = baseColors[i].a;
+                borderRenderers[i].color = c;
+            }
+
+            yield return null;
+        }
+
+        for (int i = 0; i < borderRenderers.Count; i++)
+        {
+            if (borderRenderers[i] == null) continue;
+            borderRenderers[i].color = baseColors[i];
+        }
+
+        borderPulseCoroutine = null;
+    }
+
+    IEnumerator PlayEdgeFlash(Color flashColor, float duration)
+    {
+        GameObject canvasObj = new GameObject("PerfectEdgeFlash");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 240;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080, 1920);
+        scaler.matchWidthOrHeight = 0.5f;
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        Image[] edgeImages = new Image[4];
+        Vector2[] anchorsMin =
+        {
+            new Vector2(0f, 1f),
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f)
+        };
+        Vector2[] anchorsMax =
+        {
+            new Vector2(1f, 1f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f)
+        };
+        Vector2[] sizeDeltas =
+        {
+            new Vector2(0f, 160f),
+            new Vector2(0f, 160f),
+            new Vector2(160f, 0f),
+            new Vector2(160f, 0f)
+        };
+
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject edge = new GameObject("Edge_" + i);
+            edge.transform.SetParent(canvasObj.transform, false);
+            Image image = edge.AddComponent<Image>();
+            image.color = new Color(flashColor.r, flashColor.g, flashColor.b, 0f);
+            RectTransform rect = image.rectTransform;
+            rect.anchorMin = anchorsMin[i];
+            rect.anchorMax = anchorsMax[i];
+            rect.sizeDelta = sizeDeltas[i];
+            edgeImages[i] = image;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float alpha = Mathf.Sin(t * Mathf.PI) * 0.35f;
+
+            for (int i = 0; i < edgeImages.Length; i++)
+            {
+                if (edgeImages[i] == null) continue;
+                Color c = flashColor;
+                c.a = alpha;
+                edgeImages[i].color = c;
+            }
+
+            yield return null;
+        }
+
+        Destroy(canvasObj);
+        edgeFlashCoroutine = null;
+    }
+
+    IEnumerator ShowPerfectText()
+    {
+        GameObject canvasObj = new GameObject("PerfectTextCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 260;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080, 1920);
+        scaler.matchWidthOrHeight = 0.5f;
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        GameObject glowObj = new GameObject("PerfectGlow");
+        glowObj.transform.SetParent(canvasObj.transform, false);
+        Image glow = glowObj.AddComponent<Image>();
+        glow.color = new Color(perfectBurstColorA.r, perfectBurstColorA.g, perfectBurstColorA.b, 0f);
+        RectTransform glowRect = glow.rectTransform;
+        glowRect.anchorMin = new Vector2(0.5f, 0.5f);
+        glowRect.anchorMax = new Vector2(0.5f, 0.5f);
+        glowRect.anchoredPosition = new Vector2(0f, 70f);
+        glowRect.sizeDelta = new Vector2(760f, 300f);
+
+        GameObject textBackObj = new GameObject("PerfectTextBack");
+        textBackObj.transform.SetParent(canvasObj.transform, false);
+        Text textBack = textBackObj.AddComponent<Text>();
+        RectTransform backRect = textBack.rectTransform;
+        backRect.anchorMin = new Vector2(0.5f, 0.5f);
+        backRect.anchorMax = new Vector2(0.5f, 0.5f);
+        backRect.anchoredPosition = new Vector2(0f, 70f);
+        backRect.sizeDelta = new Vector2(900f, 280f);
+
+        GameObject textFrontObj = new GameObject("PerfectTextFront");
+        textFrontObj.transform.SetParent(canvasObj.transform, false);
+        Text textFront = textFrontObj.AddComponent<Text>();
+        RectTransform frontRect = textFront.rectTransform;
+        frontRect.anchorMin = new Vector2(0.5f, 0.5f);
+        frontRect.anchorMax = new Vector2(0.5f, 0.5f);
+        frontRect.anchoredPosition = new Vector2(0f, 70f);
+        frontRect.sizeDelta = new Vector2(900f, 280f);
+
+        Font fontToUse = feedbackFont != null
+            ? feedbackFont
+            : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (fontToUse == null) fontToUse = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (fontToUse == null) fontToUse = Font.CreateDynamicFontFromOSFont("Arial", 50);
+
+        textBack.font = fontToUse;
+        textFront.font = fontToUse;
+        textBack.text = "PERFECT!";
+        textFront.text = "PERFECT!";
+        textBack.fontSize = 132;
+        textFront.fontSize = 132;
+        textBack.alignment = TextAnchor.MiddleCenter;
+        textFront.alignment = TextAnchor.MiddleCenter;
+        textBack.horizontalOverflow = HorizontalWrapMode.Overflow;
+        textFront.horizontalOverflow = HorizontalWrapMode.Overflow;
+        textBack.verticalOverflow = VerticalWrapMode.Overflow;
+        textFront.verticalOverflow = VerticalWrapMode.Overflow;
+        textBack.color = new Color(0f, 0f, 0f, 0f);
+        textFront.color = new Color(perfectBurstColorA.r, perfectBurstColorA.g, perfectBurstColorA.b, 0f);
+
+        Outline outline = textFrontObj.AddComponent<Outline>();
+        outline.effectColor = new Color(1f, 1f, 1f, 0.5f);
+        outline.effectDistance = new Vector2(4f, -4f);
+        Shadow shadow = textBackObj.AddComponent<Shadow>();
+        shadow.effectColor = new Color(perfectBurstColorB.r, perfectBurstColorB.g, perfectBurstColorB.b, 0.75f);
+        shadow.effectDistance = new Vector2(10f, -10f);
+
+        float duration = 0.82f;
+        float elapsed = 0f;
+        Vector3 startScale = Vector3.one * 0.55f;
+        Vector3 endScale = Vector3.one * 1.22f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float punch = Mathf.Sin(t * Mathf.PI);
+            float settle = 1f - Mathf.Clamp01((t - 0.55f) / 0.45f);
+            float scale = Mathf.Lerp(startScale.x, endScale.x, punch) * Mathf.Lerp(1f, 0.92f, 1f - settle);
+            float yOffset = Mathf.Lerp(0f, 110f, t);
+            float alpha = t < 0.18f ? Mathf.InverseLerp(0f, 0.18f, t) : Mathf.InverseLerp(1f, 0.62f, t);
+            Color frontColor = Color.Lerp(perfectBurstColorA, perfectBurstColorB, Mathf.PingPong(t * 2.5f, 1f));
+            frontColor.a = alpha;
+            Color backColor = new Color(0f, 0f, 0f, alpha * 0.45f);
+            Color glowColor = Color.Lerp(perfectBurstColorA, perfectBurstColorB, Mathf.PingPong(t * 2f + 0.2f, 1f));
+            glowColor.a = alpha * 0.26f;
+
+            textFront.color = frontColor;
+            textBack.color = backColor;
+            glow.color = glowColor;
+
+            textFrontObj.transform.localScale = Vector3.one * scale;
+            textBackObj.transform.localScale = Vector3.one * (scale * 1.04f);
+            glowObj.transform.localScale = Vector3.one * Mathf.Lerp(0.75f, 1.35f, punch);
+
+            frontRect.anchoredPosition = new Vector2(0f, 70f + yOffset);
+            backRect.anchoredPosition = new Vector2(0f, 70f + yOffset);
+            glowRect.anchoredPosition = new Vector2(0f, 70f + yOffset);
+
+            yield return null;
+        }
+
+        Destroy(canvasObj);
+        perfectTitleCoroutine = null;
+    }
+
+    IEnumerator PlayPerfectBurstOverlay()
+    {
+        GameObject canvasObj = new GameObject("PerfectBurstCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 245;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080, 1920);
+        scaler.matchWidthOrHeight = 0.5f;
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        Image centerGlow = CreateBurstImage(canvasObj.transform, "CenterGlow", perfectBurstColorA, new Vector2(420f, 420f));
+        Image ringA = CreateBurstImage(canvasObj.transform, "RingA", perfectBurstColorA, new Vector2(220f, 220f));
+        Image ringB = CreateBurstImage(canvasObj.transform, "RingB", perfectBurstColorB, new Vector2(220f, 220f));
+
+        float elapsed = 0f;
+        while (elapsed < perfectBurstDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / perfectBurstDuration);
+            float wave = Mathf.Sin(t * Mathf.PI);
+
+            centerGlow.rectTransform.sizeDelta = Vector2.Lerp(new Vector2(260f, 260f), new Vector2(920f, 920f), t);
+            ringA.rectTransform.sizeDelta = Vector2.Lerp(new Vector2(180f, 180f), new Vector2(980f, 980f), t);
+            ringB.rectTransform.sizeDelta = Vector2.Lerp(new Vector2(240f, 240f), new Vector2(1180f, 1180f), Mathf.Clamp01(t * 0.92f));
+
+            Color cGlow = Color.Lerp(perfectBurstColorA, perfectBurstColorB, Mathf.PingPong(t * 1.8f, 1f));
+            cGlow.a = wave * 0.18f;
+            centerGlow.color = cGlow;
+
+            Color cA = perfectBurstColorA;
+            cA.a = wave * 0.22f;
+            ringA.color = cA;
+
+            Color cB = perfectBurstColorB;
+            cB.a = wave * 0.14f;
+            ringB.color = cB;
+
+            yield return null;
+        }
+
+        Destroy(canvasObj);
+        perfectBurstCoroutine = null;
+    }
+
+    Image CreateBurstImage(Transform parent, string name, Color color, Vector2 size)
+    {
+        GameObject obj = new GameObject(name);
+        obj.transform.SetParent(parent, false);
+        Image image = obj.AddComponent<Image>();
+        RectTransform rect = image.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, 60f);
+        rect.sizeDelta = size;
+        image.color = new Color(color.r, color.g, color.b, 0f);
+        return image;
     }
     
     // Tum slotlar bos oldugunda spawn et
@@ -1788,6 +2358,46 @@ public class GridManager : MonoBehaviour
             }
         }
     }
+
+    public void OnUndoButtonClicked()
+    {
+        if (!hasUndoSnapshot)
+        {
+            StartCoroutine(ShowFloatingText("MAKE A MOVE FIRST", Color.white));
+            return;
+        }
+
+        if (remainingUndos > 0)
+        {
+            remainingUndos--;
+            PerformUndo();
+        }
+        else if (AdsManager.Instance != null)
+        {
+            isGameActive = false;
+            UpdateUndoButtonState();
+            AdsManager.Instance.ShowUndoRewarded(success =>
+            {
+                isGameActive = true;
+                if (success)
+                {
+                    PerformUndo();
+                }
+                else
+                {
+                    StartCoroutine(ShowFloatingText("AD NOT READY", Color.red));
+                    UpdateUndoButtonState();
+                }
+            });
+        }
+    }
+
+    void PerformUndo()
+    {
+        if (!hasUndoSnapshot) return;
+        RestoreUndoSnapshot();
+        UpdateUndoButtonState();
+    }
     
     public void UpdateRefreshButtonState()
     {
@@ -1846,6 +2456,58 @@ public class GridManager : MonoBehaviour
     {
         remainingRefreshes++;
         UpdateRefreshButtonState();
+    }
+
+    public void UpdateUndoButtonState()
+    {
+        if (undoButton == null) return;
+
+        undoButton.interactable = isGameActive;
+
+        if (undoButtonBackground != null)
+        {
+            undoButtonBackground.color = isGameActive ? Color.white : new Color(0.6f, 0.6f, 0.6f, 1f);
+        }
+
+        if (undoCountText != null)
+        {
+            if (!hasUndoSnapshot)
+            {
+                undoCountText.text = "1";
+            }
+            else if (remainingUndos > 0)
+            {
+                undoCountText.text = remainingUndos.ToString();
+            }
+            else
+            {
+                undoCountText.text = "+";
+            }
+        }
+        else
+        {
+            var textComp = undoButton.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+            if (textComp != null)
+            {
+                if (!hasUndoSnapshot) textComp.text = "1";
+                else textComp.text = remainingUndos > 0 ? remainingUndos.ToString() : "+";
+            }
+            else
+            {
+                var textLegacy = undoButton.GetComponentInChildren<UnityEngine.UI.Text>();
+                if (textLegacy != null)
+                {
+                    if (!hasUndoSnapshot) textLegacy.text = "1";
+                    else textLegacy.text = remainingUndos > 0 ? remainingUndos.ToString() : "+";
+                }
+            }
+        }
+    }
+
+    public void GrantUndoFromAd()
+    {
+        remainingUndos++;
+        UpdateUndoButtonState();
     }
     
     void StartRefreshButtonPulse()
@@ -2198,6 +2860,9 @@ public class GridManager : MonoBehaviour
         // Yenileme hakkini sifirla (Oyuncu tekrar 1 hakka sahip olsun)
         remainingRefreshes = maxRefreshes;
         UpdateRefreshButtonState();
+        remainingUndos = maxUndos;
+        hasUndoSnapshot = false;
+        UpdateUndoButtonState();
         
         // Level'i yeniden olustur ve hemen kaydet
         GenerateLevel();

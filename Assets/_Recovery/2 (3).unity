@@ -491,7 +491,6 @@ MonoBehaviour:
   iosRewardedAdUnitId: g6a2y1ek9fd1c8rh
   gameOverPlacement: GameOver_Ad
   extraLifePlacement: Reward_Ad
-  undoPlacement: extra_life
 --- !u!4 &239884055
 Transform:
   m_ObjectHideFlags: 0

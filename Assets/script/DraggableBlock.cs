@@ -457,6 +457,10 @@ public class DraggableBlock : MonoBehaviour
         }
 
         UpdateChildUnits(); // ChildUnits'i guncelle
+        if (gridManager != null)
+        {
+            gridManager.CaptureUndoSnapshot();
+        }
         
         // Guvenlik onlemi: Eger yerlestirme sirasinda bir sorun olursa (nadiren),
         // parcalarin yarisinin yerlesip yarisinin kalmasini onlemek icin tekrar kontrol.
