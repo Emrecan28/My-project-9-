@@ -103,8 +103,6 @@ public class GridManager : MonoBehaviour
     private Coroutine perfectNeonCoroutine;
     private Coroutine borderPulseCoroutine;
     private Coroutine edgeFlashCoroutine;
-    private Coroutine perfectBurstCoroutine;
-    private Coroutine perfectTitleCoroutine;
     
     // Oyun Durumu
     public bool isGameActive = true;
@@ -902,7 +900,7 @@ public class GridManager : MonoBehaviour
             
             // Kullanicinin geri bildirimi: "Slot kutulari cok buyuk, yanlara tasiyor"
             // Orjinal boyut: Vector3.one * slotScale. Simdi bunu biraz kucultuyoruz.
-            slot.transform.localScale = Vector3.one * (slotScale * 0.85f); // %15 kucultuldu
+            slot.transform.localScale = Vector3.one * (slotScale * 0.80f); // %20 kucultuldu
             
             slotTransforms[i] = slot.transform;
 
@@ -1967,7 +1965,6 @@ public class GridManager : MonoBehaviour
         }
 
         Destroy(canvasObj);
-        perfectTitleCoroutine = null;
     }
 
     IEnumerator PlayPerfectBurstOverlay()
@@ -2013,7 +2010,6 @@ public class GridManager : MonoBehaviour
         }
 
         Destroy(canvasObj);
-        perfectBurstCoroutine = null;
     }
 
     Image CreateBurstImage(Transform parent, string name, Color color, Vector2 size)

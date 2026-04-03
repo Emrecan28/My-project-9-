@@ -9,6 +9,8 @@ public class AdsManager : MonoBehaviour
 {
     public static AdsManager Instance;
 
+    const string AttRequestedPlayerPrefsKey = "ATT_Requested";
+
     [Header("Android Settings")]
     [SerializeField] string androidAppKey;
     [SerializeField] string androidInterstitialAdUnitId;
@@ -49,6 +51,20 @@ public class AdsManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        EnsureMainThreadDispatcher();
+    }
+
+    static void EnsureMainThreadDispatcher()
+    {
+#if UNITY_2023_1_OR_NEWER
+        if (UnityEngine.Object.FindAnyObjectByType<MainThreadDispatcher>() != null) return;
+#else
+        if (UnityEngine.Object.FindObjectOfType<MainThreadDispatcher>() != null) return;
+#endif
+
+        var go = new GameObject("MainThreadDispatcher");
+        go.AddComponent<MainThreadDispatcher>();
+        DontDestroyOnLoad(go);
     }
 
     void Start()
@@ -58,26 +74,30 @@ public class AdsManager : MonoBehaviour
         currentAppKey = iosAppKey;
         currentInterstitialId = iosInterstitialAdUnitId;
         currentRewardedId = iosRewardedAdUnitId;
-
-        if (Application.platform == RuntimePlatform.IPhonePlayer)
-        {
-            Debug.Log("AdsManager: iOS ATT izni isteniyor...");
-            ATTWrapper.RequestTrackingAuthorization((status) =>
-            {
-                Debug.Log("AdsManager: iOS ATT durumu: " + status);
-                // Status: 0=NotDetermined, 1=Restricted, 2=Denied, 3=Authorized
-                InitializeLevelPlay();
-            });
-        }
-        else
-        {
-            InitializeLevelPlay();
-        }
+        InitializeLevelPlay();
 #else
         currentAppKey = androidAppKey;
         currentInterstitialId = androidInterstitialAdUnitId;
         currentRewardedId = androidRewardedAdUnitId;
         InitializeLevelPlay();
+#endif
+    }
+
+    void RequestAttIfNeeded(Action onCompleted)
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        if (PlayerPrefs.GetInt(AttRequestedPlayerPrefsKey, 0) == 1)
+        {
+            onCompleted?.Invoke();
+            return;
+        }
+
+        PlayerPrefs.SetInt(AttRequestedPlayerPrefsKey, 1);
+        PlayerPrefs.Save();
+
+        ATTWrapper.RequestTrackingAuthorization(_ => { onCompleted?.Invoke(); });
+#else
+        onCompleted?.Invoke();
 #endif
     }
 
@@ -199,34 +219,37 @@ public class AdsManager : MonoBehaviour
             return;
         }
 
-        bool ready = interstitialAd.IsAdReady();
-        bool capped = false;
-
-        if (!string.IsNullOrEmpty(placement))
+        RequestAttIfNeeded(() =>
         {
-            capped = LevelPlayInterstitialAd.IsPlacementCapped(placement);
-        }
+            bool ready = interstitialAd.IsAdReady();
+            bool capped = false;
 
-        if (!ready || capped)
-        {
-            Debug.LogWarning("AdsManager: Interstitial hazır değil veya placement capped, yeniden yükleniyor.");
-            interstitialAd.LoadAd();
-            onCompleted?.Invoke(false);
-            return;
-        }
+            if (!string.IsNullOrEmpty(placement))
+            {
+                capped = LevelPlayInterstitialAd.IsPlacementCapped(placement);
+            }
 
-        interstitialCallback = onCompleted;
+            if (!ready || capped)
+            {
+                Debug.LogWarning("AdsManager: Interstitial hazır değil veya placement capped, yeniden yükleniyor.");
+                interstitialAd.LoadAd();
+                onCompleted?.Invoke(false);
+                return;
+            }
 
-        if (string.IsNullOrEmpty(placement))
-        {
-            Debug.Log("AdsManager: Interstitial gösteriliyor (placement yok).");
-            interstitialAd.ShowAd();
-        }
-        else
-        {
-            Debug.Log("AdsManager: Interstitial gösteriliyor, placement=" + placement);
-            interstitialAd.ShowAd(placement);
-        }
+            interstitialCallback = onCompleted;
+
+            if (string.IsNullOrEmpty(placement))
+            {
+                Debug.Log("AdsManager: Interstitial gösteriliyor (placement yok).");
+                interstitialAd.ShowAd();
+            }
+            else
+            {
+                Debug.Log("AdsManager: Interstitial gösteriliyor, placement=" + placement);
+                interstitialAd.ShowAd(placement);
+            }
+        });
     }
 
     void ShowRewarded(string placement, Action<bool> onCompleted)
@@ -239,36 +262,39 @@ public class AdsManager : MonoBehaviour
             return;
         }
 
-        bool ready = rewardedAd.IsAdReady();
-        bool capped = false;
-
-        if (!string.IsNullOrEmpty(placement))
+        RequestAttIfNeeded(() =>
         {
-            capped = LevelPlayRewardedAd.IsPlacementCapped(placement);
-        }
+            bool ready = rewardedAd.IsAdReady();
+            bool capped = false;
 
-        if (!ready || capped)
-        {
-            Debug.LogWarning("AdsManager: Rewarded hazır değil veya placement capped, yeniden yükleniyor.");
-            rewardedAd.LoadAd();
-            onCompleted?.Invoke(false);
-            return;
-        }
+            if (!string.IsNullOrEmpty(placement))
+            {
+                capped = LevelPlayRewardedAd.IsPlacementCapped(placement);
+            }
 
-        rewardedCallback = onCompleted;
-        rewardedEarned = false;
-        rewardedWasDisplayed = false;
+            if (!ready || capped)
+            {
+                Debug.LogWarning("AdsManager: Rewarded hazır değil veya placement capped, yeniden yükleniyor.");
+                rewardedAd.LoadAd();
+                onCompleted?.Invoke(false);
+                return;
+            }
 
-        if (string.IsNullOrEmpty(placement))
-        {
-            Debug.Log("AdsManager: Rewarded gösteriliyor (placement yok).");
-            rewardedAd.ShowAd();
-        }
-        else
-        {
-            Debug.Log("AdsManager: Rewarded gösteriliyor, placement=" + placement);
-            rewardedAd.ShowAd(placement);
-        }
+            rewardedCallback = onCompleted;
+            rewardedEarned = false;
+            rewardedWasDisplayed = false;
+
+            if (string.IsNullOrEmpty(placement))
+            {
+                Debug.Log("AdsManager: Rewarded gösteriliyor (placement yok).");
+                rewardedAd.ShowAd();
+            }
+            else
+            {
+                Debug.Log("AdsManager: Rewarded gösteriliyor, placement=" + placement);
+                rewardedAd.ShowAd(placement);
+            }
+        });
     }
 
     void OnInterstitialLoaded(LevelPlayAdInfo adInfo)
