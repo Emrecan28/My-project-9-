@@ -31,7 +31,7 @@ public class GridManager : MonoBehaviour
     public float bottomOffset = 4.0f;
     public float slotSpacing = 5.0f;
     public float slotScale = 2.8f;
-    public float blockInSlotScale = 0.45f;
+    public float blockInSlotScale = 0.52f;
 
     public Color slotNormalColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
     public Color slotHoverColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
@@ -103,6 +103,7 @@ public class GridManager : MonoBehaviour
     private Coroutine perfectNeonCoroutine;
     private Coroutine borderPulseCoroutine;
     private Coroutine edgeFlashCoroutine;
+    private bool levelCompleteSequenceRunning;
     
     // Oyun Durumu
     public bool isGameActive = true;
@@ -665,7 +666,10 @@ public class GridManager : MonoBehaviour
             
             SetVisuals(part, color, 0);
             part.AddComponent<BlockUnit>();
-            part.AddComponent<BoxCollider2D>(); // Dokunma icin
+            var col = part.GetComponent<BoxCollider2D>();
+            if (col == null) col = part.AddComponent<BoxCollider2D>();
+            col.size = new Vector2(1.35f, 1.35f);
+            col.isTrigger = true;
         }
         
         // Mouse handler'lari ayarla
@@ -763,53 +767,25 @@ public class GridManager : MonoBehaviour
     
     public void ShowLevelComplete()
     {
-        // Oyunu durdur (Tiklamalari engelle)
+        if (levelCompleteSequenceRunning) return;
+        levelCompleteSequenceRunning = true;
         isGameActive = false;
 
-        // KAZANILAN LEVELI HEMEN KAYDET (Animasyon sirasinda cikilirsa kaybolmasin)
         if (LevelManager.Instance != null)
         {
             LevelManager.Instance.UnlockNextLevel();
         }
         
-        // Level tamamlandi, kaydi temizle ki tekrar girerse ayni seviye eski grid ile baslamasin
         ClearSave();
 
-        // Level Complete Yazisi
-        if (gameOverTextPrefab != null)
-        {
-            GameObject textObj = Instantiate(gameOverTextPrefab, transform.parent); // Grid'in parenti (Canvas/Panel)
-            textObj.transform.localPosition = Vector3.zero;
-            
-            // Text componentini bul ve "LEVEL COMPLETE!" yaz
-            // Yaziyi biraz kucult (Kullanici istegi)
-            textObj.transform.localScale = Vector3.one * 0.6f; // Daha da kucultuldu (0.8 -> 0.6)
-
-            var textComp = textObj.GetComponentInChildren<TMPro.TextMeshProUGUI>();
-            if (textComp != null) textComp.text = "LEVEL COMPLETE!";
-            else 
-            {
-                var textLegacy = textObj.GetComponentInChildren<Text>();
-                if (textLegacy != null) textLegacy.text = "LEVEL COMPLETE!";
-            }
-            
-            // Sonraki levele gecis
-            StartCoroutine(WaitAndNextLevel(textObj));
-        }
-        else
-        {
-            // Prefab yoksa bile bekle, kullanici "LEVEL COMPLETE" yazisini gormek istiyor.
-            // Eger prefab yoksa konsola uyari ver ama yine de bekle.
-            Debug.LogWarning("GridManager: gameOverTextPrefab atanmamis! Level Complete yazisi gosterilemiyor.");
-            StartCoroutine(WaitAndNextLevel(null));
-        }
+        GameObject overlayObj = CreateBlockingOverlay("Level Complete");
+        StartCoroutine(WaitAndNextLevel(overlayObj));
     }
     
     IEnumerator WaitAndNextLevel(GameObject textObj)
     {
-        yield return new WaitForSeconds(2.0f); // 2.0 saniye "LEVEL COMPLETE!" goster (Sure uzatildi)
+        yield return new WaitForSeconds(0.7f);
         
-        // Simdi siradaki leveli goster "LEVEL X"
         if (textObj != null)
         {
             int nextLevel = 1;
@@ -818,19 +794,148 @@ public class GridManager : MonoBehaviour
                 nextLevel = LevelManager.Instance.currentLevelData.levelNumber + 1;
             }
             
-            var textComp = textObj.GetComponentInChildren<TMPro.TextMeshProUGUI>();
-            if (textComp != null) textComp.text = "LEVEL " + nextLevel;
-            else 
-            {
-                var textLegacy = textObj.GetComponentInChildren<Text>();
-                if (textLegacy != null) textLegacy.text = "LEVEL " + nextLevel;
-            }
+            SetOverlayText(textObj, "LEVEL " + nextLevel);
         }
         
-        yield return new WaitForSeconds(2.0f); // 2.0 saniye de Level ismini goster
+        yield return new WaitForSeconds(0.6f);
 
-        if (textObj != null) Destroy(textObj);
         if (LevelManager.Instance != null) LevelManager.Instance.LoadNextLevel();
+        if (textObj != null) Destroy(textObj);
+        levelCompleteSequenceRunning = false;
+    }
+
+    GameObject CreateBlockingOverlay(string message)
+    {
+        GameObject canvasObj = null;
+
+        if (gameOverTextPrefab != null)
+        {
+            canvasObj = Instantiate(gameOverTextPrefab);
+        }
+        else
+        {
+            canvasObj = new GameObject("LevelCompleteCanvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 100;
+
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1080, 1920);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            canvasObj.AddComponent<GraphicRaycaster>();
+
+            GameObject textObj = new GameObject("LevelCompleteText");
+            textObj.transform.SetParent(canvasObj.transform, false);
+            Text text = textObj.AddComponent<Text>();
+
+            RectTransform textRect = textObj.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.sizeDelta = Vector2.zero;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            Font defaultFont = feedbackFont;
+            if (defaultFont == null) defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (defaultFont == null) defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            if (defaultFont == null)
+            {
+                defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 50);
+
+                if (defaultFont == null)
+                {
+                    Font[] allFonts = Resources.FindObjectsOfTypeAll<Font>();
+                    if (allFonts != null && allFonts.Length > 0)
+                    {
+                        defaultFont = allFonts.FirstOrDefault(f => f.name.Contains("Arial"));
+                        if (defaultFont == null) defaultFont = allFonts[0];
+                    }
+                }
+            }
+
+            if (defaultFont != null)
+            {
+                text.font = defaultFont;
+            }
+
+            text.fontSize = 80;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+
+            Outline outline = textObj.AddComponent<Outline>();
+            outline.effectColor = Color.black;
+            outline.effectDistance = new Vector2(3, -3);
+
+            GameObject bgObj = new GameObject("BackgroundPanel");
+            bgObj.transform.SetParent(canvasObj.transform, false);
+            bgObj.transform.SetAsFirstSibling();
+            Image bg = bgObj.AddComponent<Image>();
+            bg.color = new Color(0, 0, 0, 0.8f);
+            bg.rectTransform.anchorMin = Vector2.zero;
+            bg.rectTransform.anchorMax = Vector2.one;
+            bg.rectTransform.sizeDelta = Vector2.zero;
+        }
+
+        EnsureOverlayBlocksInput(canvasObj);
+        SetOverlayText(canvasObj, message);
+        return canvasObj;
+    }
+
+    void EnsureOverlayBlocksInput(GameObject overlayObj)
+    {
+        if (overlayObj == null) return;
+
+        var canvas = overlayObj.GetComponentInChildren<Canvas>(true);
+        if (canvas != null)
+        {
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = Mathf.Max(canvas.sortingOrder, 100);
+        }
+
+        if (overlayObj.GetComponentInChildren<GraphicRaycaster>(true) == null)
+        {
+            var rootCanvas = overlayObj.GetComponent<Canvas>();
+            if (rootCanvas != null) overlayObj.AddComponent<GraphicRaycaster>();
+        }
+
+        var bg = overlayObj.GetComponentInChildren<Image>(true);
+        if (bg == null)
+        {
+            var canvasTransform = canvas != null ? canvas.transform : overlayObj.transform;
+            var bgObj = new GameObject("BackgroundPanel");
+            bgObj.transform.SetParent(canvasTransform, false);
+            bgObj.transform.SetAsFirstSibling();
+            bg = bgObj.AddComponent<Image>();
+            bg.color = new Color(0, 0, 0, 0.8f);
+            bg.rectTransform.anchorMin = Vector2.zero;
+            bg.rectTransform.anchorMax = Vector2.one;
+            bg.rectTransform.sizeDelta = Vector2.zero;
+        }
+
+        bg.raycastTarget = true;
+    }
+
+    void SetOverlayText(GameObject overlayObj, string message)
+    {
+        if (overlayObj == null) return;
+
+        var tmp = overlayObj.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+        if (tmp != null)
+        {
+            tmp.text = message;
+            return;
+        }
+
+        var legacy = overlayObj.GetComponentInChildren<Text>(true);
+        if (legacy != null)
+        {
+            legacy.text = message;
+        }
     }
 
     void CreateBackPanel()
@@ -903,8 +1008,8 @@ public class GridManager : MonoBehaviour
             slot.transform.localScale = Vector3.one * (slotScale * 0.80f); // %20 kucultuldu
             
             slotTransforms[i] = slot.transform;
-
-            SetVisuals(slot, slotNormalColor, 1);
+            var slotSr = slot.GetComponent<SpriteRenderer>();
+            if (slotSr != null) slotSr.enabled = false;
             
             // Slot collider'ini trigger yap (bloklari engellemesin)
             BoxCollider2D slotCollider = slot.GetComponent<BoxCollider2D>();
@@ -1458,6 +1563,7 @@ public class GridManager : MonoBehaviour
                 if (ScoreManager.Instance.GetCurrentScore() >= LevelManager.Instance.currentLevelData.targetScore)
                 {
                     ShowLevelComplete();
+                    yield break;
                 }
             }
         }
@@ -2289,6 +2395,7 @@ public class GridManager : MonoBehaviour
             pieceCollider.isTrigger = false;
             pieceCollider.enabled = true;
             Color blockColor = blockColors[Random.Range(0, blockColors.Length)];
+            piece.transform.localScale = Vector3.one * cellSize;
             SetVisuals(piece, blockColor, 10);
         }
         if (db != null)

@@ -13,6 +13,8 @@ public class DraggableBlock : MonoBehaviour
     [Header("--- Boyut Ayarlari ---")]
     public float slotScale = 0.45f; // Yuvadaki kucuk hali
     public float dragScale = 1.0f;  // Suruklerkenki normal hali
+    public float pickupColliderPadding = 0.5f;
+    public float dropSnapMaxDistanceMultiplier = 0.75f;
 
     // Orijinal şekil verisi (GridManager tarafından atanır)
     public List<Vector2Int> originalShape = new List<Vector2Int>();
@@ -96,7 +98,8 @@ public class DraggableBlock : MonoBehaviour
         // Yani size'a +1 eklemek (veya scale'e gore) gerekir.
         // Child'larin scale'i genellikle 1 (parent scale ile yonetiliyor).
         
-        collider.size = new Vector2(bounds.size.x + 1f, bounds.size.y + 1f);
+        float padding = 1f + Mathf.Max(0f, pickupColliderPadding);
+        collider.size = new Vector2(bounds.size.x + padding, bounds.size.y + padding);
         collider.offset = bounds.center;
     }
     
@@ -300,8 +303,7 @@ public class DraggableBlock : MonoBehaviour
         UpdateChildUnits(); // ChildUnits'i guncelle
         foreach (var unit in childUnits)
         {
-            Transform tile = unit.GetTileUnderMe();
-            if (tile != null)
+            if (TryGetGridPosForUnit(unit, out _))
             {
                 isOverGrid = true;
                 break;
@@ -432,17 +434,10 @@ public class DraggableBlock : MonoBehaviour
         // Tek bir parca bile disarida kalsa veya dolu yere gelse islem iptal.
         foreach (var unit in childUnits)
         {
-            Transform tile = unit.GetTileUnderMe();
-            
-            // 1. Grid disinda mi?
-            if (tile == null) return false;
-            
-            // 2. Gecerli bir grid koordinati var mi?
-            Vector2Int? gridPos = gridManager.WorldPosToGrid(tile.position);
-            if (!gridPos.HasValue) return false; // Koordinat hesaplanamadi -> Gecersiz
+            if (!TryGetGridPosForUnit(unit, out var gridPos)) return false;
             
             // 3. O koordinat dolu mu?
-            if (gridManager.IsGridOccupied(gridPos.Value)) return false; // Dolu -> Gecersiz
+            if (gridManager.IsGridOccupied(gridPos)) return false; // Dolu -> Gecersiz
         }
         
         return true;
@@ -468,25 +463,13 @@ public class DraggableBlock : MonoBehaviour
         
         foreach (var unit in childUnits)
         {
-            Transform tile = unit.GetTileUnderMe();
-            // CanPlace() true dondugu icin teorik olarak tile null olamaz ve gridPos valid olmalidir.
-            
-            if (tile != null)
+            if (TryGetGridPosForUnit(unit, out var gridPos))
             {
-                // Grid koordinatini hesapla
-                Vector2Int? gridPos = gridManager.WorldPosToGrid(tile.position);
-                
-                if (gridPos.HasValue)
-                {
-                    // Grid koordinatindan tam pozisyonu al (yamuk durmayi onlemek icin)
-                    Vector3 exactPosition = gridManager.GridToWorldPos(gridPos.Value);
-                    unit.transform.position = exactPosition;
-                    unit.transform.SetParent(gridManager.transform);
-                    if (unit.GetComponent<Collider2D>()) unit.GetComponent<Collider2D>().enabled = false;
-                    
-                    // GridStatus'e kaydet
-                    gridManager.PlaceBlockAtGrid(gridPos.Value, unit.gameObject);
-                }
+                Vector3 exactPosition = gridManager.GridToWorldPos(gridPos);
+                unit.transform.position = exactPosition;
+                unit.transform.SetParent(gridManager.transform);
+                if (unit.GetComponent<Collider2D>()) unit.GetComponent<Collider2D>().enabled = false;
+                gridManager.PlaceBlockAtGrid(gridPos, unit.gameObject);
             }
         }
         
@@ -518,33 +501,38 @@ public class DraggableBlock : MonoBehaviour
         
         foreach (var unit in childUnits)
         {
-            Transform tile = unit.GetTileUnderMe();
-            
-            // 1. Grid disinda mi?
-            if (tile == null) 
-            {
-                isValid = false;
-                continue; // Highlight edemeyiz
-            }
-            
-            // 2. Gecerli bir grid koordinati var mi?
-            Vector2Int? gridPos = gridManager.WorldPosToGrid(tile.position);
-            if (!gridPos.HasValue) 
+            if (!TryGetGridPosForUnit(unit, out var gridPos))
             {
                 isValid = false;
                 continue;
             }
             
             // Pozisyonu ekle (Grid uzerinde oldugu icin highlight edilebilir)
-            positions.Add(gridPos.Value);
+            positions.Add(gridPos);
 
             // 3. O koordinat dolu mu?
-            if (gridManager.IsGridOccupied(gridPos.Value)) 
+            if (gridManager.IsGridOccupied(gridPos)) 
             {
                 isValid = false;
             }
         }
         
         return positions;
+    }
+
+    bool TryGetGridPosForUnit(BlockUnit unit, out Vector2Int gridPos)
+    {
+        gridPos = default;
+        if (gridManager == null || unit == null) return false;
+
+        Vector2Int? candidate = gridManager.WorldPosToGrid(unit.transform.position);
+        if (!candidate.HasValue) return false;
+
+        float threshold = (gridManager.cellSize + gridManager.spacing) * dropSnapMaxDistanceMultiplier;
+        Vector3 targetWorld = gridManager.GridToWorldPos(candidate.Value);
+        if (Vector2.Distance(unit.transform.position, targetWorld) > threshold) return false;
+
+        gridPos = candidate.Value;
+        return true;
     }
 }
