@@ -487,7 +487,13 @@ public class DraggableBlock : MonoBehaviour
     {
         Vector3 mousePoint = Input.mousePosition;
         mousePoint.z = 10f;
-        return Camera.main.ScreenToWorldPoint(mousePoint);
+        Camera cam = Camera.main;
+        if (cam == null && Camera.allCamerasCount > 0)
+        {
+            cam = Camera.allCameras[0];
+        }
+        if (cam == null) return Vector3.zero;
+        return cam.ScreenToWorldPoint(mousePoint);
     }
     
     // Potansiyel yerlesim yerlerini hesapla (Preview icin) - Guncellendi
