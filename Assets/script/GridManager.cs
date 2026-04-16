@@ -222,8 +222,11 @@ public class GridManager : MonoBehaviour
         // Tersten dongu ile silmek daha guvenlidir
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
-            if (transform.GetChild(i) != null)
-                DestroyImmediate(transform.GetChild(i).gameObject);
+            var child = transform.GetChild(i);
+            if (child == null) continue;
+            child.gameObject.SetActive(false);
+            if (Application.isPlaying) Destroy(child.gameObject);
+            else DestroyImmediate(child.gameObject);
         }
 
         CreateBackPanel();

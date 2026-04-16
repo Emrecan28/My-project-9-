@@ -35,6 +35,7 @@ public class AdsManager : MonoBehaviour
     LevelPlayRewardedAd rewardedAd;
 
     bool initialized;
+    bool idsSelected;
 
     Action<bool> interstitialCallback;
     Action<bool> rewardedCallback;
@@ -67,20 +68,40 @@ public class AdsManager : MonoBehaviour
         DontDestroyOnLoad(go);
     }
 
-    void Start()
+    void Start() { }
+
+    void SelectPlatformIdsIfNeeded()
     {
-        // Platforma gore ID secimi
+        if (idsSelected) return;
+
 #if UNITY_IOS
         currentAppKey = iosAppKey;
         currentInterstitialId = iosInterstitialAdUnitId;
         currentRewardedId = iosRewardedAdUnitId;
-        InitializeLevelPlay();
 #else
         currentAppKey = androidAppKey;
         currentInterstitialId = androidInterstitialAdUnitId;
         currentRewardedId = androidRewardedAdUnitId;
-        InitializeLevelPlay();
 #endif
+
+        idsSelected = true;
+    }
+
+    void EnsureInitialized(Action onReady)
+    {
+        SelectPlatformIdsIfNeeded();
+
+        if (initialized)
+        {
+            onReady?.Invoke();
+            return;
+        }
+
+        RequestAttIfNeeded(() =>
+        {
+            InitializeLevelPlay();
+            onReady?.Invoke();
+        });
     }
 
     void RequestAttIfNeeded(Action onCompleted)
@@ -211,16 +232,16 @@ public class AdsManager : MonoBehaviour
 
     void ShowInterstitial(string placement, Action<bool> onCompleted)
     {
-        if (interstitialAd == null)
+        EnsureInitialized(() =>
         {
-            Debug.LogWarning("AdsManager: Interstitial nesnesi yok, yeniden oluşturuluyor.");
-            CreateInterstitial();
-            onCompleted?.Invoke(false);
-            return;
-        }
+            if (interstitialAd == null)
+            {
+                Debug.LogWarning("AdsManager: Interstitial nesnesi yok, yeniden oluşturuluyor.");
+                CreateInterstitial();
+                onCompleted?.Invoke(false);
+                return;
+            }
 
-        RequestAttIfNeeded(() =>
-        {
             bool ready = interstitialAd.IsAdReady();
             bool capped = false;
 
@@ -254,16 +275,16 @@ public class AdsManager : MonoBehaviour
 
     void ShowRewarded(string placement, Action<bool> onCompleted)
     {
-        if (rewardedAd == null)
+        EnsureInitialized(() =>
         {
-            Debug.LogWarning("AdsManager: Rewarded nesnesi yok, yeniden oluşturuluyor.");
-            CreateRewarded();
-            onCompleted?.Invoke(false);
-            return;
-        }
+            if (rewardedAd == null)
+            {
+                Debug.LogWarning("AdsManager: Rewarded nesnesi yok, yeniden oluşturuluyor.");
+                CreateRewarded();
+                onCompleted?.Invoke(false);
+                return;
+            }
 
-        RequestAttIfNeeded(() =>
-        {
             bool ready = rewardedAd.IsAdReady();
             bool capped = false;
 
