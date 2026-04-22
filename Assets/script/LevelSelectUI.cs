@@ -82,10 +82,12 @@ public class LevelSelectUI : MonoBehaviour
             if (btnTmpText != null)
             {
                 btnTmpText.text = level.levelNumber.ToString();
+                btnTmpText.color = Color.white;
             }
             else if (btnText != null)
             {
                 btnText.text = level.levelNumber.ToString();
+                btnText.color = Color.white;
             }
             else
             {
