@@ -129,6 +129,8 @@ public class DraggableBlock : MonoBehaviour
 
     void OnMouseDown()
     {
+        if (PauseManager.IsPauseMenuOpen) return;
+
         // Oyun aktif degilse hicbir sey yapma
         if (gridManager != null && !gridManager.isGameActive) return;
 
@@ -261,6 +263,8 @@ public class DraggableBlock : MonoBehaviour
 
     void OnMouseDrag()
     {
+        if (PauseManager.IsPauseMenuOpen) return;
+
         // Oyun aktif degilse hicbir sey yapma
         if (gridManager != null && !gridManager.isGameActive) return;
 
@@ -291,6 +295,14 @@ public class DraggableBlock : MonoBehaviour
 
     void OnMouseUp()
     {
+        if (PauseManager.IsPauseMenuOpen)
+        {
+            if (isDragging) ReturnToSlot(false);
+            isDragging = false;
+            if (gridManager != null) gridManager.ClearHighlight();
+            return;
+        }
+
         if (pickupCoroutine != null) StopCoroutine(pickupCoroutine);
         
         isDragging = false;

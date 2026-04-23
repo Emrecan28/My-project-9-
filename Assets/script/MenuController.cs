@@ -28,10 +28,23 @@ public class MenuController : MonoBehaviour
     public Color activeColor = new Color(0.7f, 0.7f, 0.7f, 1f); // Secili olanin rengi (Daha az parlak)
     public Color inactiveColor = new Color(0.4f, 0.4f, 0.4f, 1f); // Secili olmayanin rengi (Gri)
 
+    [Header("Buton Içi Icon Anim")]
+    [SerializeField] private RectTransform startPlayIcon;
+    [SerializeField] private RectTransform levelsButtonIcon;
+    [SerializeField] private float startPlayIconWiggleAmplitude = 10f;
+    [SerializeField] private float startPlayIconWiggleSpeed = 2f;
+    [SerializeField] private float levelsIconWiggleAmplitude = 8f;
+    [SerializeField] private float levelsIconWiggleSpeed = 2f;
+
     // Orijinal renkleri saklamak icin degiskenler
     private Color originalMusicOffColor = Color.white;
     private Color originalSfxOffColor = Color.white;
     private bool colorsCaptured = false;
+
+    private Vector2 startPlayIconBasePos;
+    private Vector2 levelsIconBasePos;
+    private bool startPlayIconReady;
+    private bool levelsIconReady;
 
     private void Start()
     {
@@ -73,6 +86,62 @@ public class MenuController : MonoBehaviour
 
         // Baslangicta buton renklerini guncel duruma gore ayarla
         UpdateSettingsUI();
+
+        SetupIconWigglesIfNeeded();
+    }
+
+    private void Update()
+    {
+        float t = Time.unscaledTime;
+
+        if (startPlayIconReady && startPlayIcon != null)
+        {
+            float x = Mathf.Sin(t * (startPlayIconWiggleSpeed * Mathf.PI * 2f)) * startPlayIconWiggleAmplitude;
+            startPlayIcon.anchoredPosition = startPlayIconBasePos + new Vector2(x, 0f);
+        }
+
+        if (levelsIconReady && levelsButtonIcon != null)
+        {
+            float y = Mathf.Sin(t * (levelsIconWiggleSpeed * Mathf.PI * 2f)) * levelsIconWiggleAmplitude;
+            levelsButtonIcon.anchoredPosition = levelsIconBasePos + new Vector2(0f, y);
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (startPlayIconReady && startPlayIcon != null) startPlayIcon.anchoredPosition = startPlayIconBasePos;
+        if (levelsIconReady && levelsButtonIcon != null) levelsButtonIcon.anchoredPosition = levelsIconBasePos;
+    }
+
+    private void SetupIconWigglesIfNeeded()
+    {
+        if (startPlayIcon == null)
+        {
+            GameObject go = GameObject.Find("playbuton");
+            if (go != null) startPlayIcon = go.GetComponent<RectTransform>();
+        }
+
+        if (levelsButtonIcon == null)
+        {
+            GameObject levelsButtonGo = GameObject.Find("LevelsButtons");
+            if (levelsButtonGo != null)
+            {
+                Transform imageChild = levelsButtonGo.transform.Find("Image");
+                if (imageChild != null) levelsButtonIcon = imageChild.GetComponent<RectTransform>();
+            }
+        }
+
+        if (startPlayIcon != null)
+        {
+            startPlayIconBasePos = startPlayIcon.anchoredPosition;
+            startPlayIconReady = true;
+        }
+
+        if (levelsButtonIcon != null)
+        {
+            levelsIconBasePos = levelsButtonIcon.anchoredPosition;
+            levelsIconReady = true;
+        }
     }
 
 

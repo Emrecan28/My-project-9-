@@ -2431,6 +2431,8 @@ public class GridManager : MonoBehaviour
 
     public void OnRefreshButtonClicked()
     {
+        if (PauseManager.IsPauseMenuOpen) return;
+
         if (remainingRefreshes > 0)
         {
             remainingRefreshes--;
@@ -2467,6 +2469,8 @@ public class GridManager : MonoBehaviour
 
     public void OnUndoButtonClicked()
     {
+        if (PauseManager.IsPauseMenuOpen) return;
+
         if (!hasUndoSnapshot)
         {
             StartCoroutine(ShowFloatingText("MAKE A MOVE FIRST", Color.white));
@@ -2509,7 +2513,7 @@ public class GridManager : MonoBehaviour
     {
         if (refreshButton != null)
         {
-            refreshButton.interactable = isGameActive;
+            refreshButton.interactable = isGameActive && !PauseManager.IsPauseMenuOpen;
 
             if (refreshButtonBackground != null)
             {
@@ -2568,11 +2572,11 @@ public class GridManager : MonoBehaviour
     {
         if (undoButton == null) return;
 
-        undoButton.interactable = isGameActive;
+        undoButton.interactable = isGameActive && !PauseManager.IsPauseMenuOpen;
 
         if (undoButtonBackground != null)
         {
-            undoButtonBackground.color = isGameActive ? Color.white : new Color(0.6f, 0.6f, 0.6f, 1f);
+            undoButtonBackground.color = (isGameActive && !PauseManager.IsPauseMenuOpen) ? Color.white : new Color(0.6f, 0.6f, 0.6f, 1f);
         }
 
         if (undoCountText != null)
