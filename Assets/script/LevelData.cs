@@ -6,6 +6,7 @@ public class LevelData
 {
     public int levelNumber;
     public int targetScore;
+    public bool isDaily; // Gunluk meydan okuma (levelNumber = 0)
     public List<Vector2Int> preFilledBlocks = new List<Vector2Int>();
     public List<List<Vector2Int>> obstacleGroups = new List<List<Vector2Int>>();
     

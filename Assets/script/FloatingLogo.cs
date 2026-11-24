@@ -1,24 +1,32 @@
 using UnityEngine;
 
-public partial class FloatingLogo : MonoBehaviour
+public class FloatingLogo : MonoBehaviour
 {
-    public float amplitude = 10f; // Zýplama yüksekliði
-    public float frequency = 1f;  // Saniyedeki hýz (1 = saniyede bir tur)
+    public float amplitude = 10f; // Ziplama yuksekligi
+    public float frequency = 1f;  // Saniyedeki hiz (1 = saniyede bir tur)
 
-    Vector3 posOffset = new Vector3();
-    Vector3 tempPos = new Vector3();
+    Vector3 posOffset;
+
+    bool hasBase;
 
     void Start()
     {
-        posOffset = transform.localPosition;
+        if (!hasBase) posOffset = transform.localPosition;
+    }
+
+    // Menu, logoyu kucuk ekranlara gore yeniden yerlestirdiginde cagirir
+    public void SetBase(Vector3 p)
+    {
+        posOffset = p;
+        hasBase = true;
     }
 
     void Update()
     {
-        tempPos = posOffset;
-        // Sinüs dalgasý kullanarak yumuþak bir hareket saðlýyoruz
-        tempPos.y += Mathf.Sin(Time.fixedTime * Mathf.PI * frequency) * amplitude;
-
+        // Sinus dalgasi ile yumusak hareket.
+        // Time.time kullaniliyor: Time.fixedTime 50Hz'de guncellendigi icin 60 FPS'te takiliyordu.
+        Vector3 tempPos = posOffset;
+        tempPos.y += Mathf.Sin(Time.time * Mathf.PI * frequency) * amplitude;
         transform.localPosition = tempPos;
     }
 }

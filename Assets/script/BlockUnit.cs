@@ -6,6 +6,11 @@ public class BlockUnit : MonoBehaviour
     // GridManager.SyncGridStatus tarafindan yoksayilmasi icin.
     public bool isDying = false;
 
+    // Blogun asil rengi. Parlak blok gorunumunde SpriteRenderer beyaz kalir ve renk
+    // dokunun icindedir; kayit/onizleme/efektler rengi buradan okur.
+    public Color baseColor = Color.white;
+    public bool hasBaseColor = false;
+
     // Altindaki grid karesini (Tile) bulup donduren fonksiyon
     public Transform GetTileUnderMe()
     {
@@ -19,7 +24,6 @@ public class BlockUnit : MonoBehaviour
             if (hit.gameObject != gameObject && hit.transform.parent != transform.parent)
             {
                 // Grid hucresi kontrolu: Ismi "Cell_" ile basliyorsa
-                // GridManager tarafindan olusturulan hucrelerin adi "Cell_x_y" formatindadir.
                 if (hit.name.StartsWith("Cell_"))
                 {
                     return hit.transform;
@@ -27,5 +31,15 @@ public class BlockUnit : MonoBehaviour
             }
         }
         return null;
+    }
+
+    // Objenin blok rengini dondurur (BlockUnit varsa ondan, yoksa SpriteRenderer'dan)
+    public static Color GetColor(GameObject obj)
+    {
+        if (obj == null) return Color.white;
+        BlockUnit unit = obj.GetComponent<BlockUnit>();
+        if (unit != null && unit.hasBaseColor) return unit.baseColor;
+        SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
+        return sr != null ? sr.color : Color.white;
     }
 }

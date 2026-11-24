@@ -1,5 +1,5 @@
 using UnityEngine;
-using TMPro; // TextMeshPro kullanmak i�in gerekli
+using TMPro;
 
 public class ScoreManager : MonoBehaviour
 {
@@ -10,12 +10,31 @@ public class ScoreManager : MonoBehaviour
 
     private int score = 0;
     private int highScore = 0;
-    
+
     // Level Modu icin Hedef Puan
     private int targetScore = 0;
     private bool isLevelMode = false;
     private bool isLevelCompleted = false; // Level tamamlandi mi kontrolu
     private Coroutine scorePulseCoroutine;
+
+    // Pulse animasyonu icin orijinal degerler (bir kere alinir; yoksa ust uste
+    // kombo geldiginde yazi buyuk/renkli kalabiliyordu)
+    private bool pulseBaseCaptured;
+    private Vector3 scoreBaseScale, highBaseScale;
+    private Color scoreBaseColor, highBaseColor;
+
+    // Ekranda gosterilen skor; gercek skora dogru hizla sayarak yaklasir
+    private int displayedScore;
+
+    void Update()
+    {
+        if (displayedScore == score) return;
+        int diff = score - displayedScore;
+        // Fark buyukse hizli, kucukse tek tek say (yaklasik 0.4 sn'de yetisir)
+        int step = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(diff) * Time.deltaTime * 8f));
+        displayedScore = diff > 0 ? Mathf.Min(score, displayedScore + step) : Mathf.Max(score, displayedScore - step);
+        UpdateUI();
+    }
 
     void Awake()
     {
@@ -25,8 +44,24 @@ public class ScoreManager : MonoBehaviour
 
     void Start()
     {
+        // HUD: buyuk beyaz skor, altin rengi rekor (Block Blast tarzi)
+        if (currentScoreText != null)
+        {
+            currentScoreText.color = Color.white;
+            if (currentScoreText.enableAutoSizing) currentScoreText.fontSizeMax *= 1.35f;
+            else currentScoreText.fontSize *= 1.35f;
+            // "565/1000" gibi uzun skorlar alt satira kaymasin: tek satir, tasarsa kutuya sigacak kadar kucul
+            currentScoreText.textWrappingMode = TextWrappingModes.NoWrap;
+            currentScoreText.overflowMode = TextOverflowModes.Overflow;
+            RectTransform sr = currentScoreText.rectTransform;
+            // Kutu olcekli (x2.2) oldugu icin 420 genislik ekranda ~900 birim eder; yazi hep ortada
+            if (sr.sizeDelta.x < 420f) sr.sizeDelta = new Vector2(420f, sr.sizeDelta.y);
+            currentScoreText.horizontalAlignment = HorizontalAlignmentOptions.Center;
+        }
+        if (highScoreText != null) highScoreText.color = Theme.Highlight;
+
         ResetLevelStatus();
-        
+
         // LevelManager'dan veri al
         if (LevelManager.Instance != null && LevelManager.Instance.currentLevelData != null)
         {
@@ -37,10 +72,10 @@ public class ScoreManager : MonoBehaviour
         {
             isLevelMode = false;
         }
-        
+
         UpdateUI();
     }
-    
+
     // Scene basladiginda ScoreManager'in LevelManager verisini tekrar okumasini sagla
     void OnEnable()
     {
@@ -69,7 +104,7 @@ public class ScoreManager : MonoBehaviour
         }
         UpdateUI();
     }
-    
+
     void ResetLevelStatus()
     {
         isLevelCompleted = false;
@@ -78,7 +113,7 @@ public class ScoreManager : MonoBehaviour
     public void AddScore(int amount)
     {
         score += amount;
-        
+
         // Endless modda rekor takibi
         if (!isLevelMode)
         {
@@ -88,24 +123,24 @@ public class ScoreManager : MonoBehaviour
                 PlayerPrefs.SetInt("HighScore", highScore); // Yeni rekoru kaydet
             }
         }
-        
+
         UpdateUI();
-        
+
         // Level Modu Kontrolu
         if (isLevelMode && score >= targetScore && !isLevelCompleted)
         {
             CompleteLevel();
         }
     }
-    
+
     void CompleteLevel()
     {
         isLevelCompleted = true; // Tekrar tetiklenmesini onle
-        
+
         // Level Tamamlandi!
         // GridManager uzerinden tebrik mesaji gosterilebilir veya burada basitce gecis yapilabilir.
         // Kullanici "LEVEL COMPLETE!" yazisi istiyor.
-        
+
         // GridManager'a ulasip oyunu durdurmasini veya efekti baslatmasini isteyelim
         GridManager gm = FindFirstObjectByType<GridManager>();
         if (gm != null)
@@ -122,14 +157,16 @@ public class ScoreManager : MonoBehaviour
     public void SetScore(int newScore)
     {
         score = newScore;
+        displayedScore = newScore; // Kayittan yukleme/geri alma: animasyonsuz
         UpdateUI();
     }
-    
+
     public void ResetScore()
     {
         score = 0;
+        displayedScore = 0;
         ResetLevelStatus();
-        
+
         // Level modundaysak target'i guncelle (Restart durumunda)
         if (LevelManager.Instance != null && LevelManager.Instance.currentLevelData != null)
         {
@@ -140,32 +177,36 @@ public class ScoreManager : MonoBehaviour
         {
             isLevelMode = false;
         }
-        
+
         UpdateUI();
     }
-    
+
     void UpdateUI()
     {
+        if (currentScoreText == null) return;
+
         if (isLevelMode)
         {
-            // Level Modu: Score: 150 / 200 formatinda
-            currentScoreText.text = "Score: " + score + " / " + targetScore;
-            
-            // Goal gostergesi
-            if (highScoreText != null) 
+            // Level Modu: buyuk skor / hedef
+            currentScoreText.text = displayedScore + "/" + targetScore;
+
+            if (highScoreText != null)
             {
-                highScoreText.text = "Goal: " + targetScore;
+                int levelNo = (LevelManager.Instance != null && LevelManager.Instance.currentLevelData != null)
+                    ? LevelManager.Instance.currentLevelData.levelNumber : 0;
+                bool daily = LevelManager.Instance != null && LevelManager.Instance.IsDailyMode;
+                highScoreText.text = daily ? "DAILY  GOAL " + targetScore
+                    : (levelNo > 0 ? "LEVEL " + levelNo + "  GOAL " + targetScore : "GOAL " + targetScore);
             }
         }
         else
         {
-            // Sonsuz Mod: Klasik gorunum
-            currentScoreText.text = "Score: " + score;
-            
-            // Endless modda BEST SCORE (Rekor) gosterilir
-            if (highScoreText != null) 
+            // Sonsuz Mod: sadece buyuk skor (Block Blast gibi sade), ustte rekor
+            currentScoreText.text = displayedScore.ToString();
+
+            if (highScoreText != null)
             {
-                highScoreText.text = "Best: " + highScore;
+                highScoreText.text = "BEST " + Mathf.Max(highScore, score);
             }
         }
     }
@@ -182,24 +223,27 @@ public class ScoreManager : MonoBehaviour
         scorePulseCoroutine = StartCoroutine(ScorePulseRoutine(bigCombo));
     }
 
+    void CapturePulseBase()
+    {
+        if (pulseBaseCaptured) return;
+        scoreBaseScale = currentScoreText.transform.localScale;
+        scoreBaseColor = currentScoreText.color;
+        if (highScoreText != null)
+        {
+            highBaseScale = highScoreText.transform.localScale;
+            highBaseColor = highScoreText.color;
+        }
+        pulseBaseCaptured = true;
+    }
+
     System.Collections.IEnumerator ScorePulseRoutine(bool bigCombo)
     {
+        CapturePulseBase();
+
         float duration = bigCombo ? 0.38f : 0.24f;
         float scaleBoost = bigCombo ? 1.25f : 1.12f;
-        Color pulseColor = bigCombo ? new Color(1f, 0.92f, 0.35f, 1f) : Color.white;
-
-        Vector3 scoreStartScale = currentScoreText.transform.localScale;
-        Color scoreStartColor = currentScoreText.color;
-
-        Vector3 highStartScale = Vector3.one;
-        Color highStartColor = Color.white;
+        Color pulseColor = bigCombo ? Theme.Highlight : Color.white;
         bool hasHigh = highScoreText != null;
-
-        if (hasHigh)
-        {
-            highStartScale = highScoreText.transform.localScale;
-            highStartColor = highScoreText.color;
-        }
 
         float elapsed = 0f;
         while (elapsed < duration)
@@ -207,27 +251,25 @@ public class ScoreManager : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / duration);
             float wave = Mathf.Sin(t * Mathf.PI);
-            float scale = Mathf.Lerp(1f, scaleBoost, wave);
 
-            currentScoreText.transform.localScale = scoreStartScale * scale;
-            currentScoreText.color = Color.Lerp(scoreStartColor, pulseColor, wave);
+            currentScoreText.transform.localScale = scoreBaseScale * Mathf.Lerp(1f, scaleBoost, wave);
+            currentScoreText.color = Color.Lerp(scoreBaseColor, pulseColor, wave);
 
             if (hasHigh)
             {
-                highScoreText.transform.localScale = highStartScale * Mathf.Lerp(1f, bigCombo ? 1.12f : 1.06f, wave);
-                highScoreText.color = Color.Lerp(highStartColor, pulseColor, wave * 0.6f);
+                highScoreText.transform.localScale = highBaseScale * Mathf.Lerp(1f, bigCombo ? 1.12f : 1.06f, wave);
+                highScoreText.color = Color.Lerp(highBaseColor, pulseColor, wave * 0.6f);
             }
 
             yield return null;
         }
 
-        currentScoreText.transform.localScale = scoreStartScale;
-        currentScoreText.color = scoreStartColor;
-
+        currentScoreText.transform.localScale = scoreBaseScale;
+        currentScoreText.color = scoreBaseColor;
         if (hasHigh)
         {
-            highScoreText.transform.localScale = highStartScale;
-            highScoreText.color = highStartColor;
+            highScoreText.transform.localScale = highBaseScale;
+            highScoreText.color = highBaseColor;
         }
 
         scorePulseCoroutine = null;

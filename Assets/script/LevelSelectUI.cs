@@ -1,15 +1,23 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-using TMPro; // TextMeshPro namespace ekledik
 
+// LEVEL SECIM EKRANI: tamamen kodla kurulur (eski prefab/scroll yerine).
+// Ust bar (geri, baslik, para) + ilerleme + 4 sutunlu esit kare level kutulari.
 public class LevelSelectUI : MonoBehaviour
 {
-    [Header("UI References")]
+    [Header("Eski sahne referanslari (artik kullanilmiyor, sahnede kalabilir)")]
     public GameObject buttonPrefab;
     public Transform contentPanel;
     public Button backButton;
-    
+
+    const int Columns = 4;
+    const float Cell = 200f;
+    const float Gap = 36f;
+
+    GameObject root;
+    RectTransform currentTile;
+
     void Start()
     {
         if (LevelManager.Instance == null)
@@ -18,132 +26,193 @@ public class LevelSelectUI : MonoBehaviour
             lmObj.AddComponent<LevelManager>();
         }
 
-        if (backButton != null)
+        HideOldScreen();
+        RefreshUI();
+    }
+
+    void HideOldScreen()
+    {
+        Canvas canvas = FindFirstObjectByType<Canvas>();
+        if (canvas == null) return;
+        Transform bg = canvas.transform.Find("Image");
+        if (bg != null) NeoUI.ApplyGradientBackground(bg.GetComponent<Image>());
+        Transform panel = canvas.transform.Find("Panel");
+        HideKeepingThis(panel);
+        Transform back = canvas.transform.Find("backmenubutton");
+        HideKeepingThis(back);
+    }
+
+    // Eski objeyi gizle; ama bu script onun uzerindeyse objeyi kapatma (yoksa script de durur),
+    // sadece gorselini ve cocuklarini kapat
+    void HideKeepingThis(Transform t)
+    {
+        if (t == null) return;
+        if (t != transform && !transform.IsChildOf(t))
         {
-            // Ana Menuye don
-            backButton.onClick.RemoveAllListeners(); // Varsa eski listener'lari temizle
-            backButton.onClick.AddListener(() => {
-                if (LevelManager.Instance != null)
-                {
-                    // LevelManager uzerinden Menu'yu yukle (Panel degisimi)
-                    LevelManager.Instance.LoadMenu();
-                }
-                else
-                {
-                    // LevelManager yoksa Scene 0'a donmeyi dene (Guvenli liman)
-                    SceneManager.LoadScene(0);
-                }
-            });
-        }
-        
-        // Button prefab kontrolu
-        if (buttonPrefab == null)
-        {
-            Debug.LogError("LevelSelectUI: Button Prefab atanmamis!");
+            t.gameObject.SetActive(false);
             return;
         }
+        Graphic g = t.GetComponent<Graphic>();
+        if (g != null) g.enabled = false;
+        for (int i = 0; i < t.childCount; i++)
+        {
+            Transform c = t.GetChild(i);
+            if (c != transform && !transform.IsChildOf(c)) c.gameObject.SetActive(false);
+        }
+    }
 
-        RefreshUI();
-    }
-    
-    // OnEnable cagirildiginda UI guncelle
-    void OnEnable()
+    void GoBack()
     {
-        RefreshUI();
+        if (LevelManager.Instance != null) LevelManager.Instance.LoadMenu();
+        else SceneManager.LoadScene("MainMenu");
     }
-    
+
+    // Siradaki level kutusu hafifce nabiz atar
+    void Update()
+    {
+        if (currentTile == null) return;
+        float pulse = 1f + Mathf.Sin(Time.unscaledTime * 4f) * 0.04f;
+        currentTile.localScale = new Vector3(pulse, pulse, 1f);
+    }
+
     public void RefreshUI()
     {
-        // Temizle
-        foreach (Transform child in contentPanel)
-        {
-            Destroy(child.gameObject);
-        }
-        
-        // LevelManager yoksa hata vermesin
-        if (LevelManager.Instance == null)
-        {
-            Debug.LogError("LevelManager bulunamadi! Lutfen sahneye ekleyin.");
-            return;
-        }
-        
-        int unlockedLevel = LevelManager.Instance.GetUnlockedLevel();
-        
+        if (this == null || LevelManager.Instance == null) return;
+        if (root != null) Destroy(root);
+        currentTile = null;
+
+        root = UIKit.CreateCanvas("LevelSelectCanvas", 10);
+        float top = UIKit.TopInset;
+        float h = UIKit.CanvasHeight;
+
+        // ---- Ust bar ----
+        RectTransform bar = new GameObject("TopBar", typeof(RectTransform)).GetComponent<RectTransform>();
+        bar.SetParent(root.transform, false);
+        bar.anchorMin = new Vector2(0f, 1f);
+        bar.anchorMax = new Vector2(1f, 1f);
+        bar.pivot = new Vector2(0.5f, 1f);
+        bar.sizeDelta = new Vector2(0f, 150f);
+        bar.anchoredPosition = new Vector2(0f, -top - 20f);
+
+        Button back = UIKit.BaseButton(bar, "Back", Theme.SurfaceSoft, Vector2.zero, new Vector2(120f, 120f));
+        RectTransform br = back.GetComponent<RectTransform>();
+        br.anchorMin = br.anchorMax = new Vector2(0f, 0.5f);
+        br.anchoredPosition = new Vector2(100f, 0f);
+        UIKit.Icon(back.transform, UIKit.ChevronSprite, new Vector2(-4f, 0f), new Vector2(70f, 70f), Theme.Text);
+        back.onClick.AddListener(GoBack);
+
+        Text title = UIKit.Label(bar, "LEVELS", 84, Theme.Text, TextAnchor.MiddleCenter);
+        title.rectTransform.anchoredPosition = Vector2.zero;
+
+        Text coins = UIKit.CoinBadge(bar, Vector2.zero, new Vector2(230f, 80f));
+        RectTransform cr = coins.transform.parent as RectTransform;
+        cr.anchorMin = cr.anchorMax = new Vector2(1f, 0.5f);
+        cr.anchoredPosition = new Vector2(-150f, 0f);
+
+        // ---- Ilerleme ----
+        int unlocked = LevelManager.Instance.GetUnlockedLevel();
+        int total = LevelManager.Instance.levels.Count;
+        int done = Mathf.Clamp(unlocked - 1, 0, total);
+
+        RectTransform info = new GameObject("Progress", typeof(RectTransform)).GetComponent<RectTransform>();
+        info.SetParent(root.transform, false);
+        info.anchorMin = info.anchorMax = new Vector2(0.5f, 1f);
+        info.sizeDelta = new Vector2(900f, 90f);
+        info.anchoredPosition = new Vector2(0f, -top - 230f);
+        UIKit.ProgressBar(info, new Vector2(0f, -18f), new Vector2(860f, 34f), done / (float)Mathf.Max(1, total), Theme.Positive);
+        Text pt = UIKit.Label(info, done + " / " + total + " COMPLETED", 40, Theme.TextMuted, TextAnchor.MiddleCenter);
+        pt.rectTransform.anchoredPosition = new Vector2(0f, 30f);
+
+        // ---- Level kutulari (kaydirilabilir) ----
+        float gridTop = top + 300f;
+        float viewH = h - gridTop - UIKit.BottomInset - 30f;
+        float gridW = Columns * Cell + (Columns - 1) * Gap;
+        RectTransform content = UIKit.ScrollArea(root.transform, Vector2.zero, new Vector2(gridW + 60f, viewH));
+        RectTransform view = content.parent as RectTransform;
+        view.anchorMin = view.anchorMax = new Vector2(0.5f, 1f);
+        view.pivot = new Vector2(0.5f, 1f);
+        view.anchoredPosition = new Vector2(0f, -gridTop);
+
+        int rows = Mathf.CeilToInt(total / (float)Columns);
+        float contentH = rows * Cell + (rows - 1) * Gap + 60f;
+        content.sizeDelta = new Vector2(gridW + 60f, contentH);
+
+        float currentY = 0f;
         foreach (var level in LevelManager.Instance.levels)
         {
-            GameObject btnObj = Instantiate(buttonPrefab, contentPanel);
-            Button btn = btnObj.GetComponent<Button>();
-            
-            // Text bilesenini bulma - Guclendirilmis Yontem
-            Text btnText = btnObj.GetComponentInChildren<Text>(true); // true: inactive olanlari da bul
-            TextMeshProUGUI btnTmpText = btnObj.GetComponentInChildren<TextMeshProUGUI>(true);
-
-            // Oncelik TextMeshPro'da
-            if (btnTmpText != null)
-            {
-                btnTmpText.text = level.levelNumber.ToString();
-                btnTmpText.color = Color.white;
-            }
-            else if (btnText != null)
-            {
-                btnText.text = level.levelNumber.ToString();
-                btnText.color = Color.white;
-            }
-            else
-            {
-                // Eger hicbir text bileseni bulunamazsa isme gore aramayi dene
-                Transform textObj = btnObj.transform.Find("Text");
-                if (textObj == null) textObj = btnObj.transform.Find("Label"); // Bazi UI kitlerinde Label olur
-                
-                if (textObj != null)
-                {
-                    // Bulunan objede tekrar dene
-                    var t = textObj.GetComponent<Text>();
-                    var tmp = textObj.GetComponent<TextMeshProUGUI>();
-                    
-                    if (tmp != null) tmp.text = level.levelNumber.ToString();
-                    else if (t != null) t.text = level.levelNumber.ToString();
-                }
-                else
-                {
-                    Debug.LogWarning($"Level butonu ({level.levelNumber}) icin Text bileseni bulunamadi! Prefab'i kontrol edin.");
-                }
-            }
-            
-            Image btnImage = btnObj.GetComponent<Image>();
-                        
-            if (level.levelNumber <= unlockedLevel)
-            {
-                btn.interactable = true;
-                int lvlNum = level.levelNumber; // Capture variable
-                btn.onClick.AddListener(() => {
-                    LevelManager.Instance.LoadLevel(lvlNum);
-                });
-
-                // Renk Ayarlari
-                if (btnImage != null)
-                {
-                    if (level.levelNumber < unlockedLevel)
-                    {
-                        // Tamamlanmis Level (Yesil tonu)
-                        btnImage.color = new Color(0.4f, 0.8f, 0.4f); 
-                    }
-                    else
-                    {
-                        // Su anki Level (Sari/Turuncu tonu)
-                        btnImage.color = new Color(1f, 0.8f, 0.2f);
-                    }
-                }
-            }
-            else
-            {
-                // Kilitli Level
-                btn.interactable = false;
-                if (btnImage != null) btnImage.color = Color.gray;
-                
-                if (btnText != null) btnText.color = new Color(0.3f, 0.3f, 0.3f);
-                else if (btnTmpText != null) btnTmpText.color = new Color(0.3f, 0.3f, 0.3f);
-            }
+            int i = level.levelNumber - 1;
+            int col = i % Columns, row = i / Columns;
+            Vector2 pos = new Vector2(-gridW * 0.5f + Cell * 0.5f + col * (Cell + Gap), -30f - Cell * 0.5f - row * (Cell + Gap));
+            RectTransform tile = CreateTile(content, level.levelNumber, unlocked, pos);
+            if (level.levelNumber == unlocked) { currentTile = tile; currentY = -pos.y; }
         }
+
+        // Siradaki leveli ekranin ortasina kaydir
+        float maxScroll = Mathf.Max(0f, contentH - viewH);
+        content.anchoredPosition = new Vector2(0f, Mathf.Clamp(currentY - viewH * 0.5f, 0f, maxScroll));
+    }
+
+    RectTransform CreateTile(RectTransform parent, int number, int unlocked, Vector2 pos)
+    {
+        bool completed = number < unlocked;
+        bool current = number == unlocked;
+        bool locked = number > unlocked;
+
+        Color color = completed ? Theme.Positive : (current ? Theme.Primary : Theme.SurfaceSoft);
+        Button b = UIKit.BaseButton(parent, "Level_" + number, color, pos, new Vector2(Cell, Cell));
+        RectTransform rt = b.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = pos;
+
+        if (current)
+        {
+            // Beyaz cerceve: kutunun arkasinda biraz daha buyuk beyaz yuvarlak kare
+            Image rim = UIKit.Panel(b.transform, "Rim", new Vector2(Cell + 16f, Cell + 16f), Color.white);
+            rim.raycastTarget = false;
+            rim.transform.SetAsFirstSibling();
+            // Rim, butonun kendi gorselinin arkasinda kalsin diye ayri bir katman: butonun ustune degil arkaya
+            rim.rectTransform.SetParent(parent, false);
+            rim.rectTransform.anchorMin = rim.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+            rim.rectTransform.anchoredPosition = pos;
+            rim.transform.SetSiblingIndex(b.transform.GetSiblingIndex());
+            rim.gameObject.AddComponent<FollowScale>().target = rt;
+        }
+
+        if (locked)
+        {
+            UIKit.Icon(b.transform, UIKit.LockSprite, new Vector2(0f, 8f), new Vector2(84f, 84f), Theme.WithAlpha(Theme.TextMuted, 0.8f));
+            Text n = UIKit.Label(b.transform, number.ToString(), 30, Theme.TextMuted, TextAnchor.MiddleCenter);
+            n.rectTransform.anchoredPosition = new Vector2(0f, -66f);
+            b.interactable = false;
+            ColorBlock cb = b.colors;
+            cb.disabledColor = Color.white; // kilitli kutu soluk gri olmasin, kendi rengiyle dursun
+            b.colors = cb;
+        }
+        else
+        {
+            Text n = UIKit.Label(b.transform, number.ToString(), 84, Theme.Text, TextAnchor.MiddleCenter);
+            n.rectTransform.anchoredPosition = new Vector2(0f, completed ? 14f : 0f);
+            if (completed)
+            {
+                UIKit.Icon(b.transform, UIKit.StarSprite, new Vector2(0f, -60f), new Vector2(54f, 54f), Theme.Highlight);
+            }
+            int lvl = number;
+            b.onClick.AddListener(() =>
+            {
+                Haptics.Light();
+                LevelManager.Instance.LoadLevel(lvl);
+            });
+        }
+        return rt;
+    }
+}
+
+// Siradaki levelin beyaz cercevesi kutuyla birlikte nabiz atsin
+public class FollowScale : MonoBehaviour
+{
+    public Transform target;
+    void LateUpdate()
+    {
+        if (target != null) transform.localScale = target.localScale;
     }
 }

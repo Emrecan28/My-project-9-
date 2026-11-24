@@ -20,13 +20,7 @@ public class MainThreadDispatcher : MonoBehaviour
             executionQueue.Enqueue(action);
         }
 
-        // Eger sahnede henuz Dispatcher yoksa olustur
-        if (instance == null)
-        {
-            // Unity objelerini main thread disinda yaratmak tehlikeli olabilir ama 
-            // cogu zaman bu metod Start() veya Awake() sirasinda cagrildigi icin guvenlidir.
-            // Yine de onlem olarak, bu scripti ilk sahneye (Intro veya MainMenu) bos bir objeye eklemek en garantisidir.
-        }
+        // Not: Dispatcher objesi AdsManager.Awake icinde otomatik olusturulur.
     }
 
     void Awake()
@@ -41,22 +35,27 @@ public class MainThreadDispatcher : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    readonly List<Action> runBuffer = new List<Action>();
+
     void Update()
     {
+        // Kuyrugu kilit altinda kopyala, aksiyonlari kilit disinda calistir
         lock (executionQueue)
         {
-            while (executionQueue.Count > 0)
+            while (executionQueue.Count > 0) runBuffer.Add(executionQueue.Dequeue());
+        }
+
+        for (int i = 0; i < runBuffer.Count; i++)
+        {
+            try
             {
-                var action = executionQueue.Dequeue();
-                try
-                {
-                    action.Invoke();
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError("MainThreadDispatcher Error: " + e.Message);
-                }
+                runBuffer[i].Invoke();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("MainThreadDispatcher Error: " + e);
             }
         }
+        runBuffer.Clear();
     }
 }

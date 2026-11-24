@@ -1,9 +1,7 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using Unity.Services.LevelPlay;
-#if UNITY_IOS
-using UnityEngine.iOS;
-#endif
 
 public class AdsManager : MonoBehaviour
 {
@@ -26,6 +24,28 @@ public class AdsManager : MonoBehaviour
     [SerializeField] string extraLifePlacement;
     [SerializeField] string undoPlacement;
 
+    [SerializeField] string revivePlacement;
+    [SerializeField] string levelCompletePlacement;
+
+    [Header("Interstitial Pacing (Block Blast tarzi, ama oyuncuyu bogmadan)")]
+    [Tooltip("Oyuncu bu kadar oyun bitirmeden interstitial gosterilmez (yeni oyuncu ilk izlenimi bozulmasin)")]
+    [SerializeField] int minGamesBeforeInterstitial = 3;
+    [Tooltip("Iki interstitial arasi en az bu kadar saniye olmali")]
+    [SerializeField] float minSecondsBetweenInterstitials = 120f;
+    [Tooltip("Oyuncu odullu reklam izlediyse bu kadar saniye interstitial gosterilmez")]
+    [SerializeField] float minSecondsAfterRewarded = 60f;
+    [Tooltip("Level modunda kac levelde bir interstitial denensin")]
+    [SerializeField] int levelInterstitialEvery = 2;
+    [Tooltip("Level modunda interstitial bu levelden itibaren baslar")]
+    [SerializeField] int levelInterstitialStartLevel = 4;
+
+    const string GamesFinishedKey = "Ads_GamesFinished";
+    float lastInterstitialTime = -99999f;
+    float lastRewardedTime = -99999f;
+
+    [Tooltip("Reklam kapandiktan sonra odul olayinin gelmesi icin beklenecek sure (bazi aglar odulu kapanistan sonra bildirir)")]
+    [SerializeField] float rewardGraceSeconds = 1.0f;
+
     // Runtime IDs
     string currentAppKey;
     string currentInterstitialId;
@@ -34,13 +54,13 @@ public class AdsManager : MonoBehaviour
     LevelPlayInterstitialAd interstitialAd;
     LevelPlayRewardedAd rewardedAd;
 
-    bool initialized;
+    bool initStarted;   // Init cagrildi
+    bool initCompleted; // SDK hazir (OnInitSuccess geldi)
     bool idsSelected;
 
     Action<bool> interstitialCallback;
     Action<bool> rewardedCallback;
     bool rewardedEarned;
-    bool rewardedWasDisplayed;
 
     void Awake()
     {
@@ -57,18 +77,22 @@ public class AdsManager : MonoBehaviour
 
     static void EnsureMainThreadDispatcher()
     {
-#if UNITY_2023_1_OR_NEWER
         if (UnityEngine.Object.FindAnyObjectByType<MainThreadDispatcher>() != null) return;
-#else
-        if (UnityEngine.Object.FindObjectOfType<MainThreadDispatcher>() != null) return;
-#endif
 
         var go = new GameObject("MainThreadDispatcher");
         go.AddComponent<MainThreadDispatcher>();
         DontDestroyOnLoad(go);
     }
 
-    void Start() { }
+    void Start()
+    {
+        // SDK'yi oyun acilir acilmaz baslat. Eskiden ilk reklam istendigi anda
+        // baslatiliyordu; bu yuzden ilk game over'da reklam hic hazir olmuyordu
+        // ve iOS izin penceresi oyunun ortasinda cikiyordu.
+        StartInitialization();
+    }
+
+    // ---------------- INIT ----------------
 
     void SelectPlatformIdsIfNeeded()
     {
@@ -87,21 +111,13 @@ public class AdsManager : MonoBehaviour
         idsSelected = true;
     }
 
-    void EnsureInitialized(Action onReady)
+    void StartInitialization()
     {
         SelectPlatformIdsIfNeeded();
+        if (initStarted) return;
+        initStarted = true;
 
-        if (initialized)
-        {
-            onReady?.Invoke();
-            return;
-        }
-
-        RequestAttIfNeeded(() =>
-        {
-            InitializeLevelPlay();
-            onReady?.Invoke();
-        });
+        RequestAttIfNeeded(InitializeLevelPlay);
     }
 
     void RequestAttIfNeeded(Action onCompleted)
@@ -126,16 +142,7 @@ public class AdsManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentAppKey))
         {
-#if UNITY_IOS
-            Debug.LogWarning("AdsManager: iOS App Key bos! Lutfen Inspector'dan iOS App Key alanini doldurun.");
-#else
-            Debug.LogWarning("AdsManager: Android App Key bos! Lutfen Inspector'dan Android App Key alanini doldurun.");
-#endif
-            return;
-        }
-
-        if (initialized)
-        {
+            Debug.LogWarning("AdsManager: App Key bos! Inspector'dan bu platformun App Key alanini doldurun.");
             return;
         }
 
@@ -143,18 +150,14 @@ public class AdsManager : MonoBehaviour
         LevelPlay.OnInitSuccess += OnInitSuccess;
         LevelPlay.OnInitFailed += OnInitFailed;
         LevelPlay.Init(currentAppKey);
-        initialized = true;
-        CreateInterstitial();
-        CreateRewarded();
     }
 
     void OnDestroy()
     {
-        if (Instance == this)
-        {
-            LevelPlay.OnInitSuccess -= OnInitSuccess;
-            LevelPlay.OnInitFailed -= OnInitFailed;
-        }
+        if (Instance != this) return;
+
+        LevelPlay.OnInitSuccess -= OnInitSuccess;
+        LevelPlay.OnInitFailed -= OnInitFailed;
 
         if (interstitialAd != null)
         {
@@ -171,48 +174,87 @@ public class AdsManager : MonoBehaviour
 
     void OnInitSuccess(LevelPlayConfiguration config)
     {
-        Debug.Log("AdsManager: LevelPlay init başarılı.");
+        MainThreadDispatcher.Enqueue(() =>
+        {
+            Debug.Log("AdsManager: LevelPlay init başarılı.");
+            initCompleted = true;
+            // Reklam nesneleri SDK hazir olduktan sonra olusturulmali
+            CreateInterstitial();
+            CreateRewarded();
+        });
     }
 
     void OnInitFailed(LevelPlayInitError error)
     {
-        Debug.LogError("AdsManager: LevelPlay init başarısız: " + error);
+        MainThreadDispatcher.Enqueue(() =>
+        {
+            Debug.LogError("AdsManager: LevelPlay init başarısız: " + error);
+            // Internet yoksa vb. 30 sn sonra tekrar dene
+            initStarted = false;
+            LevelPlay.OnInitSuccess -= OnInitSuccess;
+            LevelPlay.OnInitFailed -= OnInitFailed;
+            CancelInvoke(nameof(StartInitialization));
+            Invoke(nameof(StartInitialization), 30f);
+        });
     }
+
+    // ---------------- AD OBJECTS ----------------
 
     void CreateInterstitial()
     {
+        if (interstitialAd != null) return;
         if (string.IsNullOrEmpty(currentInterstitialId))
         {
-            Debug.LogWarning("AdsManager: Interstitial Ad Unit Id boş, default olarak yüklenmeye çalışılacak.");
+            Debug.LogWarning("AdsManager: Interstitial Ad Unit Id boş! Inspector'dan doldurun.");
         }
 
-        // Eğer ID boşsa LevelPlay kendi varsayılan ID'siyle dener. Bu da "AD NOT READY" hatasını engellemeye yardımcı olabilir.
-        interstitialAd = string.IsNullOrEmpty(currentInterstitialId) ? new LevelPlayInterstitialAd("") : new LevelPlayInterstitialAd(currentInterstitialId);
+        interstitialAd = new LevelPlayInterstitialAd(currentInterstitialId ?? "");
         interstitialAd.OnAdLoaded += OnInterstitialLoaded;
         interstitialAd.OnAdLoadFailed += OnInterstitialLoadFailed;
         interstitialAd.OnAdDisplayed += OnInterstitialDisplayed;
         interstitialAd.OnAdDisplayFailed += OnInterstitialDisplayFailed;
         interstitialAd.OnAdClosed += OnInterstitialClosed;
-        Debug.Log("AdsManager: Interstitial oluşturuldu, yükleniyor.");
         interstitialAd.LoadAd();
     }
 
     void CreateRewarded()
     {
+        if (rewardedAd != null) return;
         if (string.IsNullOrEmpty(currentRewardedId))
         {
-            Debug.LogWarning("AdsManager: Rewarded Ad Unit Id boş, default olarak yüklenmeye çalışılacak.");
+            Debug.LogWarning("AdsManager: Rewarded Ad Unit Id boş! Inspector'dan doldurun.");
         }
 
-        rewardedAd = string.IsNullOrEmpty(currentRewardedId) ? new LevelPlayRewardedAd("") : new LevelPlayRewardedAd(currentRewardedId);
+        rewardedAd = new LevelPlayRewardedAd(currentRewardedId ?? "");
         rewardedAd.OnAdLoaded += OnRewardedLoaded;
         rewardedAd.OnAdLoadFailed += OnRewardedLoadFailed;
         rewardedAd.OnAdDisplayed += OnRewardedDisplayed;
         rewardedAd.OnAdDisplayFailed += OnRewardedDisplayFailed;
         rewardedAd.OnAdRewarded += OnRewardedRewarded;
         rewardedAd.OnAdClosed += OnRewardedClosed;
-        Debug.Log("AdsManager: Rewarded oluşturuldu, yükleniyor.");
         rewardedAd.LoadAd();
+    }
+
+    void LoadInterstitialAd()
+    {
+        if (interstitialAd != null) interstitialAd.LoadAd();
+    }
+
+    void LoadRewardedAd()
+    {
+        if (rewardedAd != null) rewardedAd.LoadAd();
+    }
+
+    // ---------------- PUBLIC API ----------------
+
+    public bool IsRewardedReady()
+    {
+        return initCompleted && rewardedAd != null && rewardedAd.IsAdReady();
+    }
+
+    public bool IsInterstitialReady()
+    {
+        return initCompleted && interstitialAd != null && interstitialAd.IsAdReady();
     }
 
     public void ShowGameOverInterstitial(Action<bool> onCompleted)
@@ -225,231 +267,235 @@ public class AdsManager : MonoBehaviour
         ShowRewarded(extraLifePlacement, onCompleted);
     }
 
+    // Magazada "reklam izle, para kazan"
+    public void ShowCoinsRewarded(Action<bool> onCompleted)
+    {
+        ShowRewarded(extraLifePlacement, onCompleted);
+    }
+
     public void ShowUndoRewarded(Action<bool> onCompleted)
     {
         ShowRewarded(undoPlacement, onCompleted);
     }
 
+    public void ShowReviveRewarded(Action<bool> onCompleted)
+    {
+        ShowRewarded(revivePlacement, onCompleted);
+    }
+
+    // ---------------- PACING ----------------
+
+    // Bir oyun (tur) bittiginde cagrilir
+    public void RegisterGameFinished()
+    {
+        PlayerPrefs.SetInt(GamesFinishedKey, PlayerPrefs.GetInt(GamesFinishedKey, 0) + 1);
+        PlayerPrefs.Save();
+    }
+
+    public bool CanShowPacedInterstitial()
+    {
+        if (PlayerPrefs.GetInt(GamesFinishedKey, 0) < minGamesBeforeInterstitial) return false;
+        float now = Time.realtimeSinceStartup;
+        if (now - lastInterstitialTime < minSecondsBetweenInterstitials) return false;
+        if (now - lastRewardedTime < minSecondsAfterRewarded) return false;
+        return IsInterstitialReady();
+    }
+
+    // Game over: kurallar uygunsa interstitial gosterir, degilse hemen devam eder
+    public void TryShowGameOverInterstitial(Action onDone)
+    {
+        if (!CanShowPacedInterstitial()) { onDone?.Invoke(); return; }
+        ShowInterstitial(gameOverPlacement, _ => onDone?.Invoke());
+    }
+
+    // Level gecisi: her N levelde bir ve belli bir levelden sonra
+    public void TryShowLevelCompleteInterstitial(int completedLevel, Action onDone)
+    {
+        bool levelRule = completedLevel >= levelInterstitialStartLevel
+                         && levelInterstitialEvery > 0
+                         && completedLevel % levelInterstitialEvery == 0;
+        if (!levelRule || !CanShowPacedInterstitial()) { onDone?.Invoke(); return; }
+        ShowInterstitial(levelCompletePlacement, _ => onDone?.Invoke());
+    }
+
     void ShowInterstitial(string placement, Action<bool> onCompleted)
     {
-        EnsureInitialized(() =>
+        if (!initCompleted || interstitialAd == null)
         {
-            if (interstitialAd == null)
-            {
-                Debug.LogWarning("AdsManager: Interstitial nesnesi yok, yeniden oluşturuluyor.");
-                CreateInterstitial();
-                onCompleted?.Invoke(false);
-                return;
-            }
+            StartInitialization();
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            bool ready = interstitialAd.IsAdReady();
-            bool capped = false;
+        if (interstitialCallback != null)
+        {
+            // Zaten bir reklam acik
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            if (!string.IsNullOrEmpty(placement))
-            {
-                capped = LevelPlayInterstitialAd.IsPlacementCapped(placement);
-            }
+        bool capped = !string.IsNullOrEmpty(placement) && LevelPlayInterstitialAd.IsPlacementCapped(placement);
+        if (!interstitialAd.IsAdReady() || capped)
+        {
+            Debug.LogWarning("AdsManager: Interstitial hazır değil veya placement capped.");
+            if (!interstitialAd.IsAdReady()) interstitialAd.LoadAd();
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            if (!ready || capped)
-            {
-                Debug.LogWarning("AdsManager: Interstitial hazır değil veya placement capped, yeniden yükleniyor.");
-                interstitialAd.LoadAd();
-                onCompleted?.Invoke(false);
-                return;
-            }
-
-            interstitialCallback = onCompleted;
-
-            if (string.IsNullOrEmpty(placement))
-            {
-                Debug.Log("AdsManager: Interstitial gösteriliyor (placement yok).");
-                interstitialAd.ShowAd();
-            }
-            else
-            {
-                Debug.Log("AdsManager: Interstitial gösteriliyor, placement=" + placement);
-                interstitialAd.ShowAd(placement);
-            }
-        });
+        interstitialCallback = onCompleted;
+        if (string.IsNullOrEmpty(placement)) interstitialAd.ShowAd();
+        else interstitialAd.ShowAd(placement);
     }
 
     void ShowRewarded(string placement, Action<bool> onCompleted)
     {
-        EnsureInitialized(() =>
+        if (!initCompleted || rewardedAd == null)
         {
-            if (rewardedAd == null)
-            {
-                Debug.LogWarning("AdsManager: Rewarded nesnesi yok, yeniden oluşturuluyor.");
-                CreateRewarded();
-                onCompleted?.Invoke(false);
-                return;
-            }
+            StartInitialization();
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            bool ready = rewardedAd.IsAdReady();
-            bool capped = false;
+        if (rewardedCallback != null)
+        {
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            if (!string.IsNullOrEmpty(placement))
-            {
-                capped = LevelPlayRewardedAd.IsPlacementCapped(placement);
-            }
+        bool capped = !string.IsNullOrEmpty(placement) && LevelPlayRewardedAd.IsPlacementCapped(placement);
+        if (!rewardedAd.IsAdReady() || capped)
+        {
+            Debug.LogWarning("AdsManager: Rewarded hazır değil veya placement capped.");
+            if (!rewardedAd.IsAdReady()) rewardedAd.LoadAd();
+            onCompleted?.Invoke(false);
+            return;
+        }
 
-            if (!ready || capped)
-            {
-                Debug.LogWarning("AdsManager: Rewarded hazır değil veya placement capped, yeniden yükleniyor.");
-                rewardedAd.LoadAd();
-                onCompleted?.Invoke(false);
-                return;
-            }
-
-            rewardedCallback = onCompleted;
-            rewardedEarned = false;
-            rewardedWasDisplayed = false;
-
-            if (string.IsNullOrEmpty(placement))
-            {
-                Debug.Log("AdsManager: Rewarded gösteriliyor (placement yok).");
-                rewardedAd.ShowAd();
-            }
-            else
-            {
-                Debug.Log("AdsManager: Rewarded gösteriliyor, placement=" + placement);
-                rewardedAd.ShowAd(placement);
-            }
-        });
+        rewardedCallback = onCompleted;
+        rewardedEarned = false;
+        if (string.IsNullOrEmpty(placement)) rewardedAd.ShowAd();
+        else rewardedAd.ShowAd(placement);
     }
+
+    void FinishInterstitial(bool success)
+    {
+        if (success) lastInterstitialTime = Time.realtimeSinceStartup;
+        var callback = interstitialCallback;
+        interstitialCallback = null;
+        callback?.Invoke(success);
+    }
+
+    void FinishRewarded(bool earned)
+    {
+        if (earned) lastRewardedTime = Time.realtimeSinceStartup;
+        var callback = rewardedCallback;
+        rewardedCallback = null;
+        rewardedEarned = false;
+        callback?.Invoke(earned);
+    }
+
+    // ---------------- INTERSTITIAL EVENTS (SDK thread'inden gelebilir) ----------------
 
     void OnInterstitialLoaded(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Interstitial yüklendi.");
+        MainThreadDispatcher.Enqueue(() => Debug.Log("AdsManager: Interstitial yüklendi."));
     }
 
     void OnInterstitialLoadFailed(LevelPlayAdError error)
     {
-        Debug.LogError("AdsManager: Interstitial yüklenemedi: " + error);
-        
-        if (interstitialCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = interstitialCallback;
-            interstitialCallback = null;
-            MainThreadDispatcher.Enqueue(() => { callback(false); });
-        }
-        
-        // Yeniden yüklemeyi dene
-        CancelInvoke(nameof(LoadInterstitialAd));
-        Invoke(nameof(LoadInterstitialAd), 5f);
-    }
-
-    void LoadInterstitialAd()
-    {
-        if (interstitialAd != null)
-        {
-            Debug.Log("AdsManager: Interstitial yeniden yükleniyor...");
-            interstitialAd.LoadAd();
-        }
+            Debug.LogWarning("AdsManager: Interstitial yüklenemedi: " + error);
+            CancelInvoke(nameof(LoadInterstitialAd));
+            Invoke(nameof(LoadInterstitialAd), 10f);
+        });
     }
 
     void OnInterstitialDisplayed(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Interstitial görüntüleniyor.");
+        MainThreadDispatcher.Enqueue(() => Debug.Log("AdsManager: Interstitial görüntüleniyor."));
     }
 
     void OnInterstitialDisplayFailed(LevelPlayAdInfo adInfo, LevelPlayAdError error)
     {
-        Debug.LogError("AdsManager: Interstitial gösterim hatası: " + error);
-        interstitialAd.LoadAd();
-        
-        if (interstitialCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = interstitialCallback;
-            interstitialCallback = null;
-            MainThreadDispatcher.Enqueue(() => { callback(false); });
-        }
+            Debug.LogError("AdsManager: Interstitial gösterim hatası: " + error);
+            LoadInterstitialAd();
+            FinishInterstitial(false);
+        });
     }
 
     void OnInterstitialClosed(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Interstitial kapandı, yeniden yükleniyor.");
-        interstitialAd.LoadAd();
-
-        if (interstitialCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = interstitialCallback;
-            interstitialCallback = null;
-            MainThreadDispatcher.Enqueue(() => { callback(true); });
-        }
+            LoadInterstitialAd();
+            FinishInterstitial(true);
+        });
     }
+
+    // ---------------- REWARDED EVENTS ----------------
 
     void OnRewardedLoaded(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Rewarded yüklendi.");
+        MainThreadDispatcher.Enqueue(() => Debug.Log("AdsManager: Rewarded yüklendi."));
     }
 
     void OnRewardedLoadFailed(LevelPlayAdError error)
     {
-        Debug.LogError("AdsManager: Rewarded yüklenemedi: " + error);
-        
-        if (rewardedCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = rewardedCallback;
-            rewardedCallback = null;
-            MainThreadDispatcher.Enqueue(() => { callback(false); });
-        }
-        
-        // Yeniden yüklemeyi dene
-        CancelInvoke(nameof(LoadRewardedAd));
-        Invoke(nameof(LoadRewardedAd), 5f);
-    }
-
-    void LoadRewardedAd()
-    {
-        if (rewardedAd != null)
-        {
-            Debug.Log("AdsManager: Rewarded yeniden yükleniyor...");
-            rewardedAd.LoadAd();
-        }
+            Debug.LogWarning("AdsManager: Rewarded yüklenemedi: " + error);
+            CancelInvoke(nameof(LoadRewardedAd));
+            Invoke(nameof(LoadRewardedAd), 10f);
+        });
     }
 
     void OnRewardedDisplayed(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Rewarded görüntüleniyor.");
-        rewardedWasDisplayed = true;
+        MainThreadDispatcher.Enqueue(() => Debug.Log("AdsManager: Rewarded görüntüleniyor."));
     }
 
     void OnRewardedDisplayFailed(LevelPlayAdInfo adInfo, LevelPlayAdError error)
     {
-        Debug.LogError("AdsManager: Rewarded gösterim hatası: " + error);
-        rewardedAd.LoadAd();
-        
-        if (rewardedCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = rewardedCallback;
-            rewardedCallback = null;
-            MainThreadDispatcher.Enqueue(() => { callback(false); });
-        }
-        
-        rewardedEarned = false;
-        rewardedWasDisplayed = false;
+            Debug.LogError("AdsManager: Rewarded gösterim hatası: " + error);
+            LoadRewardedAd();
+            FinishRewarded(false);
+        });
     }
 
     void OnRewardedRewarded(LevelPlayAdInfo adInfo, LevelPlayReward reward)
     {
-        Debug.Log("AdsManager: Reward kazanıldı.");
-        rewardedEarned = true;
+        MainThreadDispatcher.Enqueue(() =>
+        {
+            Debug.Log("AdsManager: Reward kazanıldı.");
+            rewardedEarned = true;
+        });
     }
 
     void OnRewardedClosed(LevelPlayAdInfo adInfo)
     {
-        Debug.Log("AdsManager: Rewarded kapandı, yeniden yükleniyor.");
-        rewardedAd.LoadAd();
-
-        if (rewardedCallback != null)
+        MainThreadDispatcher.Enqueue(() =>
         {
-            var callback = rewardedCallback;
-            rewardedCallback = null;
-            bool earned = rewardedEarned || rewardedWasDisplayed;
-            rewardedEarned = false;
-            rewardedWasDisplayed = false;
-            MainThreadDispatcher.Enqueue(() => { callback(earned); });
+            LoadRewardedAd();
+            // Odul sadece reklam sonuna kadar izlendiyse verilir.
+            // Bazi aglar odulu kapanistan hemen sonra bildirdigi icin kisa bir sure beklenir.
+            StartCoroutine(ResolveRewardAfterClose());
+        });
+    }
+
+    IEnumerator ResolveRewardAfterClose()
+    {
+        float waited = 0f;
+        while (!rewardedEarned && waited < rewardGraceSeconds)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
         }
+        FinishRewarded(rewardedEarned);
     }
 }
