@@ -18,7 +18,16 @@ public class SoundManager : MonoBehaviour
     [Header("Volumes")]
     [Range(0f, 1f)] public float menuMusicVolume = 0.5f;
     [Range(0f, 1f)] public float gameplayMusicVolume = 0.3f; // Oyun ici daha sakin
+    [Tooltip("Oyun icinde muzik, menu sesinin bu orani kadar calar (kisik arka plan)")]
+    [Range(0f, 1f)] public float gameplayMusicFactor = 0.3f;
+    [Tooltip("Parcanin basindaki garip/sessiz kismi atla (saniye). 0 = otomatik: bastaki sessizligi bulur.")]
+    public float musicStartOffset = 0f;
+    [Tooltip("Muzik acilirken ve sahne degisirken ses gecis suresi")]
+    public float musicFadeTime = 1.2f;
     private float currentMusicVolume = 0.5f;
+    private float targetMusicVolume = 0.5f;   // gitmek istedigimiz ses
+    private float fadedMusicVolume = 0f;      // su an calan (yumusak gecisli) ses
+    private float loopStartTime = 0f;
 
     // Ayarlar
     public bool IsMusicOn { get; private set; } = true;
@@ -49,6 +58,12 @@ public class SoundManager : MonoBehaviour
             }
             // -------------------------
 
+            // Sahnedeki muzik kaynagi "Play On Awake" ile kendiliginden basladiysa durdur:
+            // muzigi her zaman bizim yumusak baslangicimiz (fade-in + bastaki garip kismi atlama) baslatsin
+            musicSource.playOnAwake = false;
+            if (musicSource.isPlaying) musicSource.Stop();
+            musicSource.volume = 0f;
+
             if (gameplayMusic == null) gameplayMusic = Resources.Load<AudioClip>("GameplayMusic");
             currentMusicVolume = menuMusicVolume;
 
@@ -65,6 +80,8 @@ public class SoundManager : MonoBehaviour
         // Eger bu obje asil Instance degilse (yani yok edilecek fazlaliksa) hicbir islem yapma
         if (Instance != this) return;
 
+        // Play On Awake ile baslamis olabilir: bizim yumusak baslangicimizla yeniden baslat
+        if (musicSource != null && musicSource.isPlaying) musicSource.Stop();
         ApplyMusicForScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
@@ -88,9 +105,10 @@ public class SoundManager : MonoBehaviour
     {
         if (sceneName == "GameScene")
         {
-            // Ayri oyun muzigi yoksa menu muzigi daha kisik sesle calar
+            // Ayri oyun muzigi yoksa menu muzigi KESILMEDEN devam eder, sadece kisilir
             AudioClip clip = gameplayMusic != null ? gameplayMusic : backgroundMusic;
-            if (clip != null) PlayClip(clip, gameplayMusicVolume);
+            float vol = gameplayMusic != null ? gameplayMusicVolume : menuMusicVolume * gameplayMusicFactor;
+            if (clip != null) PlayClip(clip, vol);
             else StopMusic();
         }
         else if (sceneName == "MainMenu" || sceneName == "LevelScene")
@@ -102,15 +120,59 @@ public class SoundManager : MonoBehaviour
     void PlayClip(AudioClip clip, float volume)
     {
         if (musicSource == null || clip == null) return;
+        targetMusicVolume = volume;
         currentMusicVolume = volume;
-        ApplySettings();
 
-        // Ayni parca zaten caliyorsa bastan baslatma
+        // Ayni parca zaten caliyorsa bastan baslatma: sadece ses yumusakca hedefe gider
         if (musicSource.isPlaying && musicSource.clip == clip) return;
 
         musicSource.clip = clip;
         musicSource.loop = true;
+        loopStartTime = FindMusicStart(clip);
+        fadedMusicVolume = 0f; // sessizden baslayip yavasca acilir
+        musicSource.volume = 0f;
+        musicSource.time = Mathf.Clamp(loopStartTime, 0f, Mathf.Max(0f, clip.length - 0.1f));
         musicSource.Play();
+    }
+
+    // Parcanin basindaki sessizligi/tikirtiyi atlamak icin ilk "duyulur" noktayi bulur
+    float FindMusicStart(AudioClip clip)
+    {
+        if (musicStartOffset > 0f) return musicStartOffset;
+        try
+        {
+            if (clip.loadState != AudioDataLoadState.Loaded) clip.LoadAudioData();
+            int channels = Mathf.Max(1, clip.channels);
+            int frames = Mathf.Min(clip.samples, clip.frequency * 4); // ilk 4 saniye
+            float[] data = new float[frames * channels];
+            if (!clip.GetData(data, 0)) return 0f;
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (Mathf.Abs(data[i]) > 0.02f)
+                {
+                    float t = (i / channels) / (float)clip.frequency;
+                    return Mathf.Max(0f, t - 0.05f);
+                }
+            }
+        }
+        catch (System.Exception) { }
+        return 0f; // okunamazsa bastan cal (fade-in yine yumusatir)
+    }
+
+    // Ses gecisleri (fade) ve dongu basinda garip kismi tekrar atlama
+    void Update()
+    {
+        if (Instance != this || musicSource == null) return;
+        float goal = IsMusicOn ? targetMusicVolume : 0f;
+        float speed = Mathf.Max(0.01f, musicFadeTime);
+        fadedMusicVolume = Mathf.MoveTowards(fadedMusicVolume, goal, Time.unscaledDeltaTime / speed);
+        musicSource.volume = fadedMusicVolume;
+        musicSource.mute = !IsMusicOn && fadedMusicVolume <= 0.001f;
+
+        if (loopStartTime > 0.05f && musicSource.isPlaying && musicSource.time < loopStartTime - 0.05f)
+        {
+            musicSource.time = loopStartTime;
+        }
     }
 
     public void StopMusic()
@@ -132,12 +194,9 @@ public class SoundManager : MonoBehaviour
 
     private void ApplySettings()
     {
-        if (musicSource != null)
-        {
-            musicSource.mute = !IsMusicOn;
-            // Garanti olsun diye volume'u da kapatiyoruz
-            musicSource.volume = IsMusicOn ? currentMusicVolume : 0f;
-        }
+        // Muzik sesi Update'te yumusak gecisle (fade) ayarlanir
+        if (musicSource != null && !IsMusicOn && fadedMusicVolume <= 0.001f) musicSource.mute = true;
+        if (musicSource != null && IsMusicOn) musicSource.mute = false;
 
         if (sfxSource != null)
         {

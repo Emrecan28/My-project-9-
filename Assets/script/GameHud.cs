@@ -49,7 +49,9 @@ public class GameHud : MonoBehaviour
             if (pm != null && !PauseManager.IsPauseMenuOpen) pm.OpenPauseMenu();
         });
 
-        // Orta: rekor + skor. ScoreManager kendi Start'inda yazilari buyuttugu icin bir kare sonra tasinir.
+        // Orta: rekor + skor. Hemen tasinir (ilk karede eski yerde gorunmesin);
+        // ScoreManager kendi Start'inda boyutu degistirebildigi icin bir kare sonra tekrar uygulanir.
+        PlaceScoreTexts(bar);
         StartCoroutine(MoveScoreTexts(bar));
 
         // Sahnedeki eski butonlari gizle
@@ -65,8 +67,13 @@ public class GameHud : MonoBehaviour
     System.Collections.IEnumerator MoveScoreTexts(RectTransform bar)
     {
         yield return null;
+        PlaceScoreTexts(bar);
+    }
+
+    void PlaceScoreTexts(RectTransform bar)
+    {
         ScoreManager sm = ScoreManager.Instance != null ? ScoreManager.Instance : FindFirstObjectByType<ScoreManager>();
-        if (sm == null) yield break;
+        if (sm == null) return;
         MoveText(sm.highScoreText, bar, new Vector2(0f, -60f), new Vector2(560f, 60f), 42f);
         MoveText(sm.currentScoreText, bar, new Vector2(0f, -170f), new Vector2(900f, 150f), 120f);
     }

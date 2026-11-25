@@ -41,6 +41,7 @@ public static class Progress
         Missions.Add(MissionType.Games, 1);
         Missions.ReportMax(MissionType.Score, score);
         Achievements.Check();
+        GameCenter.ReportBestScore(GameStats.BestScore);
     }
 
     public static void OnLevelComplete()

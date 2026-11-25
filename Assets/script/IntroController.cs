@@ -19,11 +19,21 @@ public class IntroController : MonoBehaviour
     Vector3 studioTargetScale;
     Vector3 unityTargetScale; // Unity logosu hedef boyutu
 
+    [Tooltip("Kapaliyken GRP Studio intro'su gosterilmez, Unity acilis ekranindan dogrudan menuye gecilir")]
+    public bool showIntro = false;
+
     void Start()
     {
         // iOS icin FPS ayari
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = 60;
+
+        // Unity'nin kendi acilis ekranindan sonra ikinci bir intro fazla: dogrudan menu
+        if (!showIntro)
+        {
+            LoadMenu();
+            return;
+        }
 
         if (grpText == null || studioText == null)
         {

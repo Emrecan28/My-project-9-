@@ -16,7 +16,7 @@ public static class MenuPanels
     // ---------- ISTATISTIK ----------
     public static void ShowStats(Action onClose = null)
     {
-        RectTransform w = UIKit.CreateWindow("StatsWindow", "STATS", new Vector2(880f, 1130f), out GameObject root);
+        RectTransform w = UIKit.CreateWindow("StatsWindow", "STATS", new Vector2(880f, 1220f), out GameObject root);
 
         string[] labels = { "BEST SCORE", "GAMES PLAYED", "AVERAGE SCORE", "LINES CLEARED", "BEST COMBO", "ALL CLEARS", "BLOCKS PLACED" };
         string[] values =
@@ -27,14 +27,16 @@ public static class MenuPanels
         };
         Color[] colors = { Theme.Highlight, Theme.Text, Theme.Text, Theme.Text, Theme.Primary, Theme.Positive, Theme.Text };
 
-        float y = 370f;
+        float y = 400f;
         for (int i = 0; i < labels.Length; i++)
         {
             Row(w, y, 100f, labels[i], values[i], colors[i]);
             y -= 114f;
         }
 
-        Button close = UIKit.TextButton(w, "CLOSE", Theme.Primary, new Vector2(0f, -470f), new Vector2(420f, 110f), 48);
+        Button lb = UIKit.TextButton(w, "LEADERBOARD", Theme.Primary, new Vector2(0f, -430f), new Vector2(560f, 110f), 46);
+        lb.onClick.AddListener(GameCenter.ShowLeaderboard);
+        Button close = UIKit.TextButton(w, "CLOSE", Theme.Neutral, new Vector2(0f, -540f), new Vector2(360f, 90f), 42);
         close.onClick.AddListener(() => Close(root, onClose));
     }
 
@@ -112,11 +114,17 @@ public static class MenuPanels
         Text sub = UIKit.Label(w, "BLOCK THEMES", 40, Theme.TextMuted, TextAnchor.MiddleCenter);
         sub.rectTransform.anchoredPosition = new Vector2(0f, 420f);
 
+        // Tema kartlari kaydirilabilir listede (tema sayisi arttikca pencere tasmaz)
+        RectTransform content = UIKit.ScrollArea(w, new Vector2(0f, -85f), new Vector2(840f, 860f));
+        int rows = Mathf.CeilToInt(BlockSkin.Themes.Length / 2f);
+        float contentH = rows * 280f + 10f;
+        content.sizeDelta = new Vector2(content.sizeDelta.x, contentH);
         for (int i = 0; i < BlockSkin.Themes.Length; i++)
         {
             int col = i % 2, row = i / 2;
-            Vector2 pos = new Vector2(col == 0 ? -205f : 205f, 260f - row * 280f);
-            ThemeCard(w, i, pos);
+            // Kartlar content'in ortasina gore konumlanir (ust kenar = contentH/2)
+            Vector2 pos = new Vector2(col == 0 ? -205f : 205f, contentH * 0.5f - 135f - row * 280f);
+            ThemeCard(content, i, pos);
         }
 
         // Reklam izleyip para kazan (gunluk sinirli)

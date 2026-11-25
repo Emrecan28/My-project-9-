@@ -390,7 +390,7 @@ public class MenuController : MonoBehaviour
     private void ApplyModernMenuStyle()
     {
         if (!useModernStyle) return;
-        Canvas canvas = FindFirstObjectByType<Canvas>();
+        Canvas canvas = FindMenuCanvas();
         if (canvas == null) return;
 
         Transform bg = canvas.transform.Find("Background");
@@ -406,6 +406,27 @@ public class MenuController : MonoBehaviour
         if (oldLevels != null) oldLevels.gameObject.SetActive(false);
 
         BuildMenu(canvas, menuButtons);
+    }
+
+    // Ana menu canvas'ini guvenle bul. FindFirstObjectByType<Canvas> cihazda baska bir canvas'i
+    // (reklam/bildirim/alt panel) dondurebiliyordu: o zaman eski menu kaliyordu.
+    private Canvas FindMenuCanvas()
+    {
+        Canvas[] all = FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        foreach (Canvas c in all)
+        {
+            if (c != null && c.isRootCanvas && c.transform.Find("MenuButtons") != null) return c;
+        }
+        if (soundButton != null)
+        {
+            Canvas c = soundButton.GetComponentInParent<Canvas>(true);
+            if (c != null) return c.rootCanvas;
+        }
+        foreach (Canvas c in all)
+        {
+            if (c != null && c.isRootCanvas && c.gameObject.scene == gameObject.scene) return c;
+        }
+        return null;
     }
 
     // ---------------- YENI ANA MENU ----------------
@@ -451,12 +472,12 @@ public class MenuController : MonoBehaviour
         Button awards = UIKit.TextButton(stack.transform, "AWARDS", Theme.SurfaceSoft, new Vector2(-x0, -285f), new Vector2(smallW, smallH), 36);
         awards.onClick.AddListener(() => MenuPanels.ShowAchievements(RefreshMenu));
 
-        // Ikinci satir: iki buton, ortali
-        float x1 = (smallW + gapX) * 0.5f;
-        Button stats = UIKit.TextButton(stack.transform, "STATS", Theme.SurfaceSoft, new Vector2(-x1, -425f), new Vector2(smallW, smallH), 36);
+        Button stats = UIKit.TextButton(stack.transform, "STATS", Theme.SurfaceSoft, new Vector2(x0, -425f), new Vector2(smallW, smallH), 36);
         stats.onClick.AddListener(() => MenuPanels.ShowStats(RefreshMenu));
-        Button settings = UIKit.TextButton(stack.transform, "SETTINGS", Theme.SurfaceSoft, new Vector2(x1, -425f), new Vector2(smallW, smallH), 36);
+        Button settings = UIKit.TextButton(stack.transform, "SETTINGS", Theme.SurfaceSoft, new Vector2(0f, -425f), new Vector2(smallW, smallH), 36);
         settings.onClick.AddListener(() => MenuPanels.ShowSettings(UpdateSettingsUI));
+        Button ranks = UIKit.TextButton(stack.transform, "RANKS", Theme.SurfaceSoft, new Vector2(-x0, -425f), new Vector2(smallW, smallH), 36);
+        ranks.onClick.AddListener(GameCenter.ShowLeaderboard);
 
         // Gorevlerde alinmamis odul varsa kirmizi nokta
         Image dot = UIKit.Icon(missions.transform, UIKit.CircleSprite, new Vector2(smallW * 0.5f - 14f, smallH * 0.5f - 14f), new Vector2(40f, 40f), Theme.Danger);
@@ -655,6 +676,7 @@ public class MenuController : MonoBehaviour
         int gained = Economy.ClaimDailyLogin(out int streak, out bool welcome);
         if (gained > 0) MenuPanels.ShowDailyBonus(gained, streak, welcome, RefreshMenu);
         Achievements.Check(); // Guncellemeden once kazanilmis basarimlar da acilsin
+        GameCenter.SignIn();  // Game Center girisi (iOS kendi kucuk penceresini gosterir)
     }
 
     private void SetupHapticsButton()

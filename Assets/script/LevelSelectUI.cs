@@ -32,7 +32,17 @@ public class LevelSelectUI : MonoBehaviour
 
     void HideOldScreen()
     {
-        Canvas canvas = FindFirstObjectByType<Canvas>();
+        // Bu sahnenin kok canvas'i (baska kalici canvas'lar karismasin)
+        Canvas canvas = null;
+        foreach (Canvas c in FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+        {
+            if (c != null && c.isRootCanvas && c.gameObject.scene == gameObject.scene && c.transform.Find("Panel") != null) { canvas = c; break; }
+        }
+        if (canvas == null)
+        {
+            Canvas own = GetComponentInParent<Canvas>(true);
+            if (own != null) canvas = own.rootCanvas;
+        }
         if (canvas == null) return;
         Transform bg = canvas.transform.Find("Image");
         if (bg != null) NeoUI.ApplyGradientBackground(bg.GetComponent<Image>());

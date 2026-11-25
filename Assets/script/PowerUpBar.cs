@@ -9,6 +9,7 @@ public class PowerUpBar : MonoBehaviour
 {
     GridManager grid;
     RectTransform bar;
+    CanvasGroup barGroup;
     Button bombButton, rotateButton, undoButton, refreshButton;
     Text undoSub, refreshSub;
     Image bombImage;
@@ -33,6 +34,9 @@ public class PowerUpBar : MonoBehaviour
         bar.anchorMin = bar.anchorMax = new Vector2(0.5f, 0f);
         bar.sizeDelta = new Vector2(980f, 120f);
         bar.anchoredPosition = new Vector2(0f, UIKit.BottomInset + 110f);
+        // Dogru yerine oturana kadar gorunmesin (ilk karelerde zipliyordu), sonra yumusakca belirsin
+        barGroup = bar.gameObject.AddComponent<CanvasGroup>();
+        barGroup.alpha = 0f;
 
         undoButton = AdButton("UNDO", Theme.Neutral, new Vector2(-369f, 0f), out undoSub);
         undoButton.onClick.AddListener(() => { if (grid != null) grid.OnUndoButtonClicked(); });
@@ -102,7 +106,7 @@ public class PowerUpBar : MonoBehaviour
         yield return null;
         yield return null;
         Camera cam = Camera.main;
-        if (cam == null || grid == null) yield break;
+        if (cam == null || grid == null) { if (barGroup != null) barGroup.alpha = 1f; yield break; }
 
         float gridHalf = (grid.columns * grid.cellSize + (grid.columns - 1) * grid.spacing) * 0.5f;
         Vector3 slotCenter = grid.transform.TransformPoint(new Vector3(0f, -gridHalf - grid.bottomOffset, 0f));
@@ -126,6 +130,15 @@ public class PowerUpBar : MonoBehaviour
             bar.anchoredPosition = new Vector2(0f, safeBottom + 60f);
             bar.localScale = Vector3.one * 0.75f;
         }
+
+        float t = 0f;
+        while (t < 0.25f && barGroup != null)
+        {
+            t += Time.unscaledDeltaTime;
+            barGroup.alpha = Mathf.Clamp01(t / 0.25f);
+            yield return null;
+        }
+        if (barGroup != null) barGroup.alpha = 1f;
     }
 
     void RefreshBomb()

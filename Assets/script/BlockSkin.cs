@@ -6,7 +6,8 @@ using UnityEngine;
 public static class BlockSkin
 {
     // Magazadaki blok temalari. 0 = CLASSIC (ucretsiz), digerleri parayla acilir.
-    public static readonly string[] ThemeNames = { "CLASSIC", "CANDY", "NEON", "OCEAN", "SUNSET", "JEWEL" };
+    public static readonly string[] ThemeNames = { "CLASSIC", "CANDY", "NEON", "OCEAN", "SUNSET", "JEWEL",
+                                                   "FOREST", "LAVA", "ICE", "BERRY", "RETRO", "GOLDEN" };
 
     public static readonly Color[][] Themes =
     {
@@ -34,6 +35,30 @@ public static class BlockSkin
             new Color(0.82f, 0.08f, 0.22f), new Color(0.05f, 0.70f, 0.42f), new Color(0.10f, 0.32f, 0.88f),
             new Color(0.55f, 0.18f, 0.85f), new Color(1.00f, 0.70f, 0.10f), new Color(0.62f, 0.10f, 0.32f),
             new Color(0.25f, 0.85f, 0.85f) },
+        new Color[] { // FOREST: yesil ve toprak tonlari
+            new Color(0.20f, 0.62f, 0.28f), new Color(0.45f, 0.78f, 0.30f), new Color(0.72f, 0.86f, 0.36f),
+            new Color(0.55f, 0.40f, 0.22f), new Color(0.85f, 0.65f, 0.30f), new Color(0.12f, 0.48f, 0.42f),
+            new Color(0.95f, 0.80f, 0.45f) },
+        new Color[] { // LAVA: ates kirmizi-turuncu
+            new Color(0.80f, 0.10f, 0.08f), new Color(0.95f, 0.30f, 0.08f), new Color(1.00f, 0.52f, 0.10f),
+            new Color(1.00f, 0.74f, 0.20f), new Color(0.60f, 0.08f, 0.12f), new Color(1.00f, 0.42f, 0.30f),
+            new Color(0.90f, 0.20f, 0.35f) },
+        new Color[] { // ICE: buz mavisi ve beyaz
+            new Color(0.70f, 0.90f, 1.00f), new Color(0.45f, 0.78f, 0.98f), new Color(0.25f, 0.60f, 0.95f),
+            new Color(0.85f, 0.95f, 1.00f), new Color(0.55f, 0.85f, 0.90f), new Color(0.60f, 0.70f, 0.98f),
+            new Color(0.35f, 0.88f, 0.95f) },
+        new Color[] { // BERRY: pembe-mor meyve tonlari
+            new Color(0.85f, 0.15f, 0.45f), new Color(0.65f, 0.15f, 0.55f), new Color(0.98f, 0.45f, 0.65f),
+            new Color(0.45f, 0.20f, 0.65f), new Color(0.95f, 0.30f, 0.30f), new Color(0.78f, 0.50f, 0.95f),
+            new Color(1.00f, 0.65f, 0.80f) },
+        new Color[] { // RETRO: 80'ler oyun renkleri
+            new Color(1.00f, 0.35f, 0.55f), new Color(0.20f, 0.85f, 0.95f), new Color(1.00f, 0.90f, 0.25f),
+            new Color(0.55f, 0.95f, 0.40f), new Color(0.65f, 0.40f, 1.00f), new Color(1.00f, 0.55f, 0.20f),
+            new Color(0.30f, 0.50f, 1.00f) },
+        new Color[] { // GOLDEN: altin, bronz, gumus
+            new Color(1.00f, 0.80f, 0.25f), new Color(0.90f, 0.62f, 0.18f), new Color(0.75f, 0.50f, 0.22f),
+            new Color(0.85f, 0.85f, 0.90f), new Color(1.00f, 0.90f, 0.55f), new Color(0.65f, 0.68f, 0.75f),
+            new Color(0.95f, 0.70f, 0.40f) },
     };
 
     // Secili temanin renkleri
